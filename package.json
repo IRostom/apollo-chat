@@ -1,0 +1,27 @@
+{
+  "name": "apollo-chat-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monorepo for Apollo Chat frontend and backend",
+  "scripts": {
+    "dev": "concurrently -k -p \"[{name}]\" -n \"backend,frontend\" -c \"yellow.bold,cyan.bold\" \"pnpm --filter backend dev\" \"pnpm --filter frontend dev\"",
+    "dev:backend": "pnpm --filter backend dev",
+    "dev:frontend": "pnpm --filter frontend dev",
+    "build": "pnpm -r build",
+    "build:backend": "pnpm --filter backend build:ts",
+    "build:frontend": "pnpm --filter frontend build",
+    "test": "pnpm -r test",
+    "test:backend": "pnpm --filter backend test",
+    "start": "pnpm --filter backend start",
+    "lint": "pnpm -r lint",
+    "format": "pnpm -r format"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0",
+    "pnpm": ">=8.0.0"
+  }
+}
+

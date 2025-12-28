@@ -1,0 +1,288 @@
+import { Router, Request, Response } from "express";
+import { body, validationResult } from "express-validator";
+import { addMessageToChat, createChat, getChatHistory } from "../services/chat";
+import {
+  webFetchTool,
+  webSearchTool,
+  webTools as availableWebTools,
+} from "../ollama/tools/web";
+import { ollamaClient } from "../ollama/client";
+import { Message } from "ollama";
+import { frame } from "../utils/frame";
+
+const router = Router();
+
+const chatValidation = [
+  body("model").isString().notEmpty(),
+  body("message").isObject(),
+  body("message.role").isString().notEmpty(),
+  body("message.content").isString().notEmpty(),
+  body("conversationId").optional().isString(),
+  body("think")
+    .optional()
+    .custom(
+      (value) =>
+        typeof value === "boolean" || ["low", "medium", "high"].includes(value),
+    ),
+  body("webTools").optional().isBoolean(),
+];
+
+router.post(
+  "/chat/stream",
+  chatValidation,
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const {
+      model,
+      message: clientMessage,
+      conversationId,
+      think,
+      webTools,
+    } = req.body as {
+      model: string;
+      message: { role: string; content: string };
+      conversationId?: string;
+      think?: boolean | "low" | "medium" | "high";
+      webTools?: boolean;
+    };
+
+    // ---- Headers for streaming ----
+    res.setHeader("Content-Type", "application/x-ndjson");
+    res.setHeader("Transfer-Encoding", "chunked");
+
+    try {
+      // ---- Send start frame ----
+      res.write(frame("start"));
+
+      // ---- Create / resolve conversation ----
+      let convId = conversationId;
+      if (!convId) {
+        console.log("creating new chat");
+        const chatRes = await createChat({
+          title: clientMessage.content.slice(0, 20),
+          model,
+        });
+        convId = chatRes.toString();
+        console.log("new chat created", convId, clientMessage.content);
+        // ---- Send meta frame FIRST ----
+        res.write(
+          frame("conversationId", {
+            value: convId,
+          }),
+        );
+      }
+
+      // ---- Load history ----
+      const chatHistory: Array<Message> = [];
+
+      if (conversationId) {
+        console.log("fetching history from database...");
+        const results = await getChatHistory(+conversationId);
+        chatHistory.push(
+          ...results.map((r) => {
+            console.log("r", r.tool_calls);
+            return {
+              role: r.role,
+              content: r.content,
+              thinking: r.thinking ?? undefined,
+              tool_calls: r.tool_calls ? JSON.parse(r.tool_calls) : undefined,
+              tool_name: r.tool_name ?? undefined,
+            };
+          }),
+        );
+      }
+      console.log("Persisting user message...");
+
+      const userMessage = {
+        role: clientMessage.role,
+        content: clientMessage.content,
+      };
+
+      chatHistory.push(userMessage);
+      // ---- Persist user message ----
+      addMessageToChat({ ...userMessage, conversation_id: +convId });
+
+      try {
+        while (true) {
+          // ---- Stream model output ----
+          const ollamaResponse = await ollamaClient.chat({
+            model,
+            messages: [...chatHistory],
+            stream: true,
+            think: think ?? false,
+            tools: [...(webTools ? [webSearchTool, webFetchTool] : [])],
+          });
+
+          let fullReply = "";
+          let thinkingResponse = "";
+          let inThinking = false;
+          let hadToolCalls = false;
+
+          console.log("Start streaming");
+          res.write(frame("role", { value: "assistant" }));
+          for await (const part of ollamaResponse) {
+            if (part.message.thinking && !inThinking) {
+              inThinking = true;
+              console.log("Thinking:\n", part.message.thinking);
+              res.write(
+                frame("isThinking", {
+                  value: true,
+                }),
+              );
+            }
+            if (part.message.thinking) {
+              thinkingResponse += part.message.thinking;
+              res.write(
+                frame("thinking", {
+                  value: part.message.thinking,
+                }),
+              );
+            }
+            if (part.message.content) {
+              if (inThinking) {
+                inThinking = false;
+                res.write(
+                  frame("isThinking", {
+                    value: false,
+                  }),
+                );
+              }
+              const token = part.message.content;
+              fullReply += token;
+              res.write(
+                frame("token", {
+                  value: token,
+                }),
+              );
+            }
+            if (part.message.tool_calls && part.message.tool_calls.length > 0) {
+              if (inThinking) {
+                inThinking = false;
+                res.write(
+                  frame("isThinking", {
+                    value: false,
+                  }),
+                );
+              }
+              hadToolCalls = true;
+              const assistantMessage: Message = {
+                role: "assistant",
+                content: fullReply,
+                thinking: thinkingResponse,
+              };
+              chatHistory.push({
+                ...assistantMessage,
+                tool_calls: part.message.tool_calls,
+              });
+              addMessageToChat({
+                ...assistantMessage,
+                conversation_id: +convId,
+                tool_calls: JSON.stringify(part.message.tool_calls),
+              });
+              // Execute tools and append tool results
+              for (const toolCall of part.message.tool_calls) {
+                const functionToCall =
+                  availableWebTools[
+                    // typescript :D
+                    toolCall.function.name as keyof typeof availableWebTools
+                  ];
+                if (functionToCall) {
+                  const args = toolCall.function.arguments as any;
+                  console.log(
+                    "\nCalling function:",
+                    toolCall.function.name,
+                    "with arguments:",
+                    args,
+                  );
+                  const output = await functionToCall(args);
+
+                  res.write(frame("role", { value: "tool" }));
+                  res.write(
+                    frame("toolName", {
+                      value: toolCall.function.name,
+                    }),
+                  );
+                  res.write(
+                    frame("toolValue", {
+                      value: JSON.stringify(output).slice(0, 200),
+                    }),
+                  );
+                  console.log(
+                    "Function result:",
+                    JSON.stringify(output).slice(0, 200),
+                    "\n",
+                  );
+                  const toolMessage: Message = {
+                    role: "tool",
+                    // content: JSON.stringify(output).slice(0, 2000 * 4), // cap at ~2000 tokens
+                    content: JSON.stringify(output),
+                  };
+                  chatHistory.push({
+                    ...toolMessage,
+                    tool_name: toolCall.function.name,
+                  });
+                  addMessageToChat({
+                    ...toolMessage,
+                    conversation_id: +convId,
+                    tool_name: toolCall.function.name.toString(),
+                    tool_calls: undefined,
+                  });
+                }
+              }
+            }
+          }
+
+          if (!hadToolCalls) {
+            console.log("streaming about to end");
+            // ---- End frame ----
+            res.write(frame("end"));
+            res.end();
+            // ---- Persist assistant reply ----
+            await addMessageToChat({
+              conversation_id: +convId,
+              content: fullReply,
+              role: "assistant",
+              thinking: thinkingResponse,
+            });
+
+            break;
+          }
+        }
+      } catch (err) {
+        console.error(err);
+
+        res.write(
+          frame("error", {
+            message: "Streaming failed",
+          }),
+        );
+        res.end();
+      }
+    } catch (err) {
+      console.error(err);
+
+      // Check if headers have already been sent (streaming started)
+      if (res.headersSent) {
+        // Write error frame to stream and end it
+        res.write(
+          frame("error", {
+            message:
+              err instanceof Error ? err.message : "Internal server error",
+          }),
+        );
+        res.end();
+      } else {
+        // Headers not sent yet, can use regular JSON response
+        res.status(500).json({
+          error: err instanceof Error ? err.message : "Internal server error",
+        });
+      }
+    }
+  },
+);
+
+export default router;
