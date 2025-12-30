@@ -5,6 +5,8 @@ import rootRouter from "./routes/root";
 import chatRouter from "./routes/chat";
 import conversationRouter from "./routes/conversation";
 import ollamaRouter from "./routes/ollamaRouter";
+import uploadRouter from "./routes/upload";
+import path from "path";
 
 const app: Express = express();
 
@@ -32,5 +34,10 @@ app.use("/", rootRouter);
 app.use("/", chatRouter);
 app.use("/", conversationRouter);
 app.use("/", ollamaRouter);
+app.use("/", uploadRouter);
+
+// Serve static files from uploads directory
+const uploadDir = path.join(__dirname, "../uploads");
+app.use("/uploads", express.static(uploadDir));
 
 export default app;

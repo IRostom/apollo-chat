@@ -98,3 +98,5 @@ __screenshots__/
 history.db
 
 .vscode
+
+apps/backend/uploads/**/*
