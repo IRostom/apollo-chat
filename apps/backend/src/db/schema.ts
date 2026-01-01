@@ -22,6 +22,7 @@ export const messagesTable = sqliteTable("messages_table", {
   tool_calls: text(),
   tool_name: text(),
   role: text().notNull(),
+  images: text(),
   created_at: text()
     .notNull()
     .default(sql`(current_timestamp)`),

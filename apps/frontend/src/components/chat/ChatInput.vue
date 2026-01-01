@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowUpIcon, PlusIcon, ChevronDown, Brain, Globe } from 'lucide-vue-next'
+import { ArrowUpIcon, PlusIcon, ChevronDown, Brain, Globe, Image } from 'lucide-vue-next'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,9 +16,11 @@ import { Toggle } from '@/components/ui/toggle'
 import { ref, computed } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useModels } from '@/queries/models'
+import type { ChatFile } from '@/types/chat'
 
 interface Props {
   disabled?: boolean
+  files?: ChatFile[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -27,6 +29,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   send: [message: string]
+  attach: [file: File]
 }>()
 
 const appStore = useAppStore()
@@ -58,11 +61,46 @@ function onEnterKey(e: KeyboardEvent) {
 function updateSelectedModel(model: string) {
   appStore.updateUserSelectedModel(model)
 }
+
+const fileInputRef = ref<HTMLInputElement | null>(null)
+
+function openFilePicker() {
+  fileInputRef.value?.click()
+}
+
+function onFileChange(event: Event) {
+  const files = (event.target as HTMLInputElement).files
+  if (!files || !files.length) return
+  const file = files[0]
+
+  if (files.length === 1) {
+    emit('attach', file!)
+  }
+
+  console.log('Selected file:', file)
+}
+
+// TODO: fix memory leak
+const filesUrls = computed(() => {
+  return props.files?.map((f) => {
+    return {
+      ...f,
+      url: URL.createObjectURL(f.file),
+    }
+  })
+})
 </script>
 
 <template>
   <div class="sticky bottom-0 max-w-3xl w-full mx-auto pb-4 bg-white">
     <InputGroup>
+      <InputGroupAddon align="block-start">
+        <div class="flex items-center justify-start gap-3">
+          <div v-for="file in filesUrls" :key="file.url" class="border rounded-xl p-1">
+            <img :src="file.url" class="w-14.5 h-14.5" />
+          </div>
+        </div>
+      </InputGroupAddon>
       <InputGroupTextarea
         v-model="userMsg"
         @keydown.enter="onEnterKey"
@@ -73,6 +111,22 @@ function updateSelectedModel(model: string) {
         <InputGroupButton variant="outline" class="rounded-full" size="icon-xs">
           <PlusIcon class="size-4" />
         </InputGroupButton>
+        <InputGroupButton
+          size="icon-sm"
+          class="rounded-full"
+          aria-label="Attach file"
+          @click="openFilePicker"
+        >
+          <Image />
+        </InputGroupButton>
+        <input
+          id="picture"
+          type="file"
+          class="hidden"
+          ref="fileInputRef"
+          accept="image/*"
+          @change="onFileChange"
+        />
         <Toggle
           size="sm"
           :modelValue="appStore.shouldThink"

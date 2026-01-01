@@ -8,7 +8,7 @@ export function useModels() {
       return getModels()
     },
     initialData: [],
-    refetchInterval: 5000,
+    refetchInterval: 20000,
   })
 
   return {

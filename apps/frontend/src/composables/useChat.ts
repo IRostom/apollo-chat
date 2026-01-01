@@ -3,13 +3,14 @@
  * Handles chat state management and message sending
  */
 
-import { ref, computed, watch } from 'vue'
+import { computed, watch } from 'vue'
 import { useChat as useChatQuery } from '@/queries/chat'
 import { useChatHistory } from '@/queries/chatHistory'
 import { useConversation } from './useConversation'
 import { renderMarkdown } from './useMarkdown'
 import { useAppStore } from '@/stores/app'
 import type { ChatMessage } from '@/types/chat'
+import { useUploadFile } from '@/queries/upload'
 
 /**
  * Chat state and operations
@@ -17,6 +18,7 @@ import type { ChatMessage } from '@/types/chat'
 export function useChat() {
   const { conversationId, skipRefetchForId, navigateToConversation } = useConversation()
   const appStore = useAppStore()
+  const { files, uploadFile, reset: resetFiles } = useUploadFile()
 
   const {
     send: sendMsg,
@@ -25,6 +27,7 @@ export function useChat() {
     messages: localHistory,
     resetMessages,
   } = useChatQuery(conversationId)
+
   const { data: chatHistoryServer } = useChatHistory(conversationId, skipRefetchForId)
 
   const chatHistoryServerWithMd = computed(() => {
@@ -61,7 +64,9 @@ export function useChat() {
       message,
       think: appStore.shouldThink,
       webTools: appStore.useWebTools,
+      images: files.value,
     })
+    resetFiles()
   }
 
   watch(chatHistoryServer, () => {
@@ -79,9 +84,15 @@ export function useChat() {
     return [...(chatHistoryServerWithMd.value ?? []), ...chatWithMd.value]
   })
 
+  async function attachImageToChat(file: File) {
+    uploadFile(file)
+  }
+
   return {
     chatMd: combinedChatMd,
+    files,
     isStreaming,
     sendMessage,
+    attachImageToChat,
   }
 }

@@ -1,7 +1,6 @@
 import { computed, ref, type Ref } from 'vue'
 import { sendMessage } from '@/api/chatService'
 import type { ChatMessage, SendMessageOptions, StreamFrame } from '@/types/chat'
-import { useAppStore } from '@/stores/app'
 
 export function useChat(conversationId: Ref<string | undefined>) {
   const isStreaming: Ref<boolean> = ref(false)
@@ -11,16 +10,26 @@ export function useChat(conversationId: Ref<string | undefined>) {
   const currIndex = computed(() => messages.value.length - 1)
 
   const send = async (options: SendMessageOptions) => {
-    const { model, message, think, webTools } = options
+    const { model, message, think, webTools, images } = options
+
+    const messageWithImageIds: ChatMessage = { ...message }
+    if (images?.length) {
+      messageWithImageIds.images = images.map((f) => f.id!)
+    }
+
+    const messageWithImageUrls: ChatMessage = { ...message }
+    if (images?.length) {
+      messageWithImageUrls.images = images.map((f) => f.path!)
+    }
 
     isStreaming.value = true
     // push user message
-    messages.value.push(message)
+    messages.value.push(messageWithImageUrls)
     try {
       await sendMessage(
         {
           model,
-          message,
+          message: messageWithImageIds,
           conversationId: conversationId?.value,
           think,
           webTools,
