@@ -13,7 +13,7 @@ import {
   InputGroupTextarea,
 } from '@/components/ui/input-group'
 import { Toggle } from '@/components/ui/toggle'
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useModels } from '@/queries/models'
 import type { ChatFile } from '@/types/chat'
@@ -80,14 +80,30 @@ function onFileChange(event: Event) {
   console.log('Selected file:', file)
 }
 
-// TODO: fix memory leak
-const filesUrls = computed(() => {
-  return props.files?.map((f) => {
-    return {
-      ...f,
-      url: URL.createObjectURL(f.file),
-    }
-  })
+const filesUrls = ref<Array<ChatFile & { url: string }>>([])
+const createdUrls: string[] = []
+
+function revokeUrls() {
+  createdUrls.forEach((url) => URL.revokeObjectURL(url))
+  createdUrls.length = 0
+}
+
+watch(
+  () => props.files,
+  (newFiles) => {
+    revokeUrls()
+    filesUrls.value =
+      newFiles?.map((f) => {
+        const url = URL.createObjectURL(f.file)
+        createdUrls.push(url)
+        return { ...f, url }
+      }) ?? []
+  },
+  { immediate: true, deep: true },
+)
+
+onUnmounted(() => {
+  revokeUrls()
 })
 </script>
 
