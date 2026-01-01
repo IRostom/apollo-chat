@@ -22,9 +22,9 @@ router.get("/conversations/:id", async (req: Request, res: Response) => {
     .where(eq(messagesTable.conversation_id, +id));
   const mapped = await Promise.all(
     messages.map(async (m) => {
-      const imageIds = m.images?.split(",");
+      const imageIds = m.images ? m.images.split(",").filter(Boolean) : [];
       let images;
-      if (imageIds?.length) {
+      if (imageIds.length) {
         images = await Promise.all(
           imageIds.map(async (i) => {
             const file = await fileService.getFileById(+i);
@@ -32,7 +32,6 @@ router.get("/conversations/:id", async (req: Request, res: Response) => {
           })
         );
       }
-      // When `m.images` is an empty string (stored from an empty image array being sent to the backend), splitting it produces `[""]` with length 1, causing the code to attempt fetching a file with ID 0 via `fileService.getFileById(+i)` where `i` is an empty string. The condition should validate that the split result contains actual IDs before processing.
       return {
         ...m,
         images,
