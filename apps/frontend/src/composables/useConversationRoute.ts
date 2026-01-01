@@ -9,7 +9,7 @@ import { useRoute, useRouter } from 'vue-router'
 /**
  * Handle conversation ID from route and navigation
  */
-export function useConversation() {
+export function useConversationRoute() {
   const route = useRoute()
   const router = useRouter()
 

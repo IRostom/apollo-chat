@@ -1,35 +1,47 @@
+/**
+ * Chat Stream Query
+ * Handles streaming state and frame processing for chat messages
+ */
+
 import { computed, ref, type Ref } from 'vue'
 import { sendMessage } from '@/api/chatService'
-import type { ChatMessage, SendMessageOptions, StreamFrame } from '@/types/chat'
+import type { ChatMessage, StreamFrame } from '@/types/chat'
 
-export function useChat(conversationId: Ref<string | undefined>) {
+/**
+ * Manages chat streaming state and message accumulation
+ * Responsibility: Stream handling, message accumulation, frame parsing
+ */
+export function useChatStream(conversationId: Ref<string | undefined>) {
   const isStreaming: Ref<boolean> = ref(false)
   const isThinking: Ref<boolean> = ref(false)
   const newConversationId: Ref<string> = ref('')
   const messages: Ref<ChatMessage[]> = ref([])
   const currIndex = computed(() => messages.value.length - 1)
 
-  const send = async (options: SendMessageOptions) => {
-    const { model, message, think, webTools, images } = options
-
-    const messageWithImageIds: ChatMessage = { ...message }
-    if (images?.length) {
-      messageWithImageIds.images = images.map((f) => f.id!)
-    }
-
-    const messageWithImageUrls: ChatMessage = { ...message }
-    if (images?.length) {
-      messageWithImageUrls.images = images.map((f) => f.path!)
-    }
+  /**
+   * Send a message and handle the streaming response
+   * Expects pre-processed messages (image transformation done by caller)
+   */
+  const send = async (options: {
+    model: string
+    /** Message to display locally (may have image URLs) */
+    displayMessage: ChatMessage
+    /** Message to send to server (may have image IDs) */
+    serverMessage: ChatMessage
+    think?: boolean
+    webTools?: boolean
+  }) => {
+    const { model, displayMessage, serverMessage, think, webTools } = options
 
     isStreaming.value = true
-    // push user message
-    messages.value.push(messageWithImageUrls)
+    // Push user message for display
+    messages.value.push(displayMessage)
+
     try {
       await sendMessage(
         {
           model,
-          message: messageWithImageIds,
+          message: serverMessage,
           conversationId: conversationId?.value,
           think,
           webTools,
@@ -42,7 +54,7 @@ export function useChat(conversationId: Ref<string | undefined>) {
               break
 
             case 'role':
-              // push placeholder for new message
+              // Push placeholder for new message
               if (frame.value) {
                 messages.value.push({
                   role: frame.value.toString() as ChatMessage['role'],
@@ -79,7 +91,6 @@ export function useChat(conversationId: Ref<string | undefined>) {
             case 'token':
               // Accumulate tokens
               if (frame.value) {
-                // response.value += frame.value
                 messages.value[currIndex.value]!.content += frame.value
               }
               break
@@ -124,6 +135,7 @@ export function useChat(conversationId: Ref<string | undefined>) {
 
   return {
     isStreaming,
+    isThinking,
     newConversationId,
     send,
     messages,
