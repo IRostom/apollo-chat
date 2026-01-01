@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { db } from "../db/client";
 import { chatsTable, messagesTable } from "../db/schema";
 import { desc, eq } from "drizzle-orm";
+import { fileService } from "../db/fileService";
 
 const router = Router();
 
@@ -19,7 +20,25 @@ router.get("/conversations/:id", async (req: Request, res: Response) => {
     .select()
     .from(messagesTable)
     .where(eq(messagesTable.conversation_id, +id));
-  res.json(messages);
+  const mapped = await Promise.all(
+    messages.map(async (m) => {
+      const imageIds = m.images ? m.images.split(",").filter(Boolean) : [];
+      let images;
+      if (imageIds.length) {
+        images = await Promise.all(
+          imageIds.map(async (i) => {
+            const file = await fileService.getFileById(+i);
+            return file?.path;
+          })
+        );
+      }
+      return {
+        ...m,
+        images,
+      };
+    })
+  );
+  res.json(mapped);
 });
 
 router.delete("/conversations/:id", async (req: Request, res: Response) => {

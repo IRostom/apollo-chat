@@ -9,6 +9,7 @@ export interface ChatMessageServer {
   thinking?: string
   tool_name?: string
   tool_calls?: string
+  images?: string[]
 }
 
 export interface ChatMessage {
@@ -17,6 +18,7 @@ export interface ChatMessage {
   id?: number
   thinking?: string
   toolName?: string
+  images?: number[] | string[]
 }
 
 export interface Conversation {
@@ -58,4 +60,13 @@ export interface SendMessageOptions {
   conversationId?: string
   think?: boolean
   webTools?: boolean
+  images?: ChatFile[]
+}
+
+export interface ChatFile {
+  file: File
+  isUploaded: boolean
+  id?: number
+  path?: string
+  isError: boolean
 }

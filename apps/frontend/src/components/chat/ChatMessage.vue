@@ -4,6 +4,7 @@ import { computed } from 'vue'
 import Spinner from '@/components/ui/spinner/Spinner.vue'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ChevronDown, ChevronUp, Globe } from 'lucide-vue-next'
+import { getImageUrl } from '@/config/api'
 
 interface Props {
   message: ChatMessage
@@ -35,11 +36,16 @@ const toolResult = computed(() => {
   <Spinner
     v-if="isLoading && isAssistant && (!message.content.length || !message.thinking?.length)"
   />
-  <div
-    v-else-if="isUser"
-    class="rounded-2xl w-fit ms-auto bg-amber-300 p-3"
-    v-html="message.content"
-  ></div>
+
+  <div v-else-if="isUser" class="flex flex-col gap-2">
+    <div class="flex items-center justify-end gap-2">
+      <div v-for="image in message.images" :key="image" class="border rounded-xl p-1">
+        <img :src="getImageUrl(image as string)" class="w-14.5 h-14.5" />
+      </div>
+    </div>
+    <div class="rounded-2xl w-fit ms-auto bg-amber-300 p-3" v-html="message.content"></div>
+  </div>
+
   <div v-else-if="isAssistant" class="mx-auto prose lg:prose-lg flex flex-col">
     <Collapsible v-if="message.thinking?.length" class="border rounded-lg" v-slot="{ open }">
       <CollapsibleTrigger class="py-2 px-3 cursor-pointer w-full text-start flex items-center">

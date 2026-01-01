@@ -9,6 +9,7 @@ import {
 import { ollamaClient } from "../ollama/client";
 import { Message } from "ollama";
 import { frame } from "../utils/frame";
+import { convertImageIdsToBase64 } from "../utils/imageUtils";
 
 const router = Router();
 
@@ -17,6 +18,8 @@ const chatValidation = [
   body("message").isObject(),
   body("message.role").isString().notEmpty(),
   body("message.content").isString().notEmpty(),
+  body("message.images").optional().isArray(),
+  body("message.images.*").isInt({ min: 1 }),
   body("conversationId").optional().isString(),
   body("think")
     .optional()
@@ -44,7 +47,7 @@ router.post(
       webTools,
     } = req.body as {
       model: string;
-      message: { role: string; content: string };
+      message: { role: string; content: string; images?: string[] };
       conversationId?: string;
       think?: boolean | "low" | "medium" | "high";
       webTools?: boolean;
@@ -82,29 +85,51 @@ router.post(
       if (conversationId) {
         console.log("fetching history from database...");
         const results = await getChatHistory(+conversationId);
-        chatHistory.push(
-          ...results.map((r) => {
-            console.log("r", r.tool_calls);
+        const mappedResults = await Promise.all(
+          results.map(async (r) => {
+            let base64Images;
+            if (r.images && r.images.split(",").length > 0) {
+              try {
+                const ids = r.images.split(",");
+                base64Images = await convertImageIdsToBase64(ids);
+              } catch (error) {
+                console.error("Error processing images:", error);
+                // Continue without images if conversion fails
+              }
+            }
             return {
               role: r.role,
               content: r.content,
               thinking: r.thinking ?? undefined,
               tool_calls: r.tool_calls ? JSON.parse(r.tool_calls) : undefined,
               tool_name: r.tool_name ?? undefined,
+              images: base64Images,
             };
           }),
         );
+        chatHistory.push(...mappedResults);
       }
+
       console.log("Persisting user message...");
 
+      let clientImagesBase64;
+      if (clientMessage.images && clientMessage.images.length) {
+        clientImagesBase64 = await convertImageIdsToBase64(
+          clientMessage.images,
+        );
+      }
       const userMessage = {
         role: clientMessage.role,
         content: clientMessage.content,
       };
 
-      chatHistory.push(userMessage);
+      chatHistory.push({ ...userMessage, images: clientImagesBase64 });
       // ---- Persist user message ----
-      addMessageToChat({ ...userMessage, conversation_id: +convId });
+      addMessageToChat({
+        ...userMessage,
+        conversation_id: +convId,
+        images: clientMessage.images?.toString(),
+      });
 
       try {
         while (true) {
@@ -115,7 +140,7 @@ router.post(
             stream: true,
             think: think ?? false,
             tools: [...(webTools ? [webSearchTool, webFetchTool] : [])],
-          });
+          } as any);
 
           let fullReply = "";
           let thinkingResponse = "";
@@ -169,7 +194,7 @@ router.post(
                 );
               }
               hadToolCalls = true;
-              const assistantMessage: Message = {
+              const assistantMessage = {
                 role: "assistant",
                 content: fullReply,
                 thinking: thinkingResponse,
@@ -216,9 +241,8 @@ router.post(
                     JSON.stringify(output).slice(0, 200),
                     "\n",
                   );
-                  const toolMessage: Message = {
+                  const toolMessage = {
                     role: "tool",
-                    // content: JSON.stringify(output).slice(0, 2000 * 4), // cap at ~2000 tokens
                     content: JSON.stringify(output),
                   };
                   chatHistory.push({

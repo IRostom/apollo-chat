@@ -18,6 +18,10 @@ export const API_CONFIG = {
     models: {
       list: '/ollama/models',
     },
+    upload: {
+      file: '/upload',
+      files: '/upload-multiple',
+    },
   },
 } as const
 
@@ -28,3 +32,6 @@ export function getApiUrl(endpoint: string): string {
   return `${API_CONFIG.baseUrl}${endpoint}`
 }
 
+export function getImageUrl(image: string): string {
+  return `${API_CONFIG.baseUrl}/uploads/${image}`
+}
