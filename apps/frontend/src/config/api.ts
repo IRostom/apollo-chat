@@ -22,6 +22,7 @@ export const API_CONFIG = {
       file: '/upload',
       files: '/upload-multiple',
     },
+    transcribe: '/transcribe',
   },
 } as const
 

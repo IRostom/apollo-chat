@@ -6,6 +6,7 @@ import chatRouter from "./routes/chat";
 import conversationRouter from "./routes/conversation";
 import ollamaRouter from "./routes/ollamaRouter";
 import uploadRouter from "./routes/upload";
+import transcribeRouter from "./routes/transcribe";
 import path from "path";
 
 const app: Express = express();
@@ -30,11 +31,11 @@ app.use(express.json());
 app.use(corsMiddleware);
 
 // Routes
-app.use("/", rootRouter);
 app.use("/", chatRouter);
 app.use("/", conversationRouter);
 app.use("/", ollamaRouter);
 app.use("/", uploadRouter);
+app.use("/", transcribeRouter);
 
 // Serve static files from uploads directory
 const uploadDir = path.join(__dirname, "../uploads");

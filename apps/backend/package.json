@@ -10,7 +10,7 @@
     "test": "pnpm run build:ts && tsc -p test/tsconfig.json && c8 node --test -r ts-node/register \"test/**/*.ts\"",
     "start": "pnpm run build:ts && node dist/server.js",
     "build": "pnpm run build:ts",
-    "build:ts": "tsc",
+    "build:ts": "tsc && cp src/services/*.py dist/services/",
     "watch:ts": "tsc -w",
     "dev": "concurrently -k -p \"[{name}]\" -n \"TypeScript,App\" -c \"yellow.bold,cyan.bold\" \"pnpm:watch:ts\" \"pnpm:dev:start\"",
     "dev:start": "pnpm run build:ts && nodemon --watch dist --delay 2 --exec node dist/server.js"

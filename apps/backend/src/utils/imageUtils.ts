@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { fileService, FileRecord } from "../db/fileService";
+import { fileService } from "../db/fileService";
 
 /**
  * Convert a file path to base64 string
@@ -43,7 +43,9 @@ export async function getFilePathById(fileId: number): Promise<string> {
  * @param fileIds - Array of file IDs
  * @returns Array of base64 encoded strings
  */
-export async function convertImageIdsToBase64(fileIds: string[]): Promise<string[]> {
+export async function convertImageIdsToBase64(
+  fileIds: string[]
+): Promise<string[]> {
   try {
     const base64Images: string[] = [];
 

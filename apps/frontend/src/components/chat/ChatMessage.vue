@@ -44,9 +44,11 @@ const toolResult = computed(() => {
         <img :src="getImageUrl(image as string)" class="w-14.5 h-14.5" />
       </div>
     </div>
-    <Card class="w-fit ms-auto">
+    <Card class="w-fit ms-auto py-4">
       <CardContent>
-        <div v-html="message.content"></div>
+        <div class="whitespace-break-spaces">
+          {{ message.content }}
+        </div>
       </CardContent>
     </Card>
   </div>
@@ -71,7 +73,7 @@ const toolResult = computed(() => {
     <div v-html="message.content"></div>
   </div>
 
-  <div v-else-if="isTool" class="mx-auto prose lg:prose-lg flex flex-col">
+  <div v-else-if="isTool" class="mx-auto dark:prose-invert prose lg:prose-lg flex flex-col">
     <Collapsible v-if="message.content?.length" class="border rounded-lg" v-slot="{ open }">
       <CollapsibleTrigger class="py-2 px-3 cursor-pointer w-full text-start flex items-center">
         <div class="flex items-center gap-2">

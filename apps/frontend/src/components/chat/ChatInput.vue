@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { ArrowUpIcon, PlusIcon, ChevronDown, Brain, Globe, Image } from 'lucide-vue-next'
+import {
+  ArrowUpIcon,
+  PlusIcon,
+  ChevronDown,
+  Brain,
+  Globe,
+  Image,
+  Mic,
+  Square,
+} from 'lucide-vue-next'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,6 +26,8 @@ import { ref, computed, watch, onUnmounted } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useModels } from '@/queries/models'
 import type { ChatFile } from '@/types/chat'
+import { useRecordAndTranscribe } from '@/composables/useRecordAndTranscribe'
+import Spinner from '../ui/spinner/Spinner.vue'
 
 interface Props {
   disabled?: boolean
@@ -34,6 +45,11 @@ const emit = defineEmits<{
 
 const appStore = useAppStore()
 const { data: models } = useModels()
+const { startRecording, stopRecordingAndTranscribe, isRecording, isTranscribing, canRecord } =
+  useRecordAndTranscribe((result) => {
+    console.log('transcribe result: ', result)
+    userMsg.value = result
+  })
 
 const userMsg = ref('')
 const userSelectedModel = computed(() => appStore.userSelectedModel)
@@ -121,7 +137,7 @@ onUnmounted(() => {
         v-model="userMsg"
         @keydown.enter="onEnterKey"
         placeholder="Ask anything"
-        :disabled="disabled"
+        :disabled="disabled || isTranscribing || isRecording"
       />
       <InputGroupAddon align="block-end">
         <InputGroupButton variant="outline" class="rounded-full" size="icon-xs">
@@ -180,14 +196,37 @@ onUnmounted(() => {
           </DropdownMenu>
 
           <InputGroupButton
+            v-if="userMsg.trim().length || !canRecord"
             variant="default"
             class="rounded-full ml-auto"
             size="icon-xs"
             @click="send()"
-            :disabled="disabled || !userSelectedModel?.length"
+            :disabled="
+              disabled ||
+              !userSelectedModel?.length ||
+              isTranscribing ||
+              isRecording ||
+              !userMsg.trim().length
+            "
           >
             <ArrowUpIcon class="size-4" />
             <span class="sr-only">Send</span>
+          </InputGroupButton>
+
+          <InputGroupButton
+            v-else-if="canRecord"
+            variant="default"
+            class="rounded-full ml-auto"
+            size="icon-xs"
+            @click="isRecording ? stopRecordingAndTranscribe() : startRecording()"
+            :disabled="isTranscribing"
+          >
+            <Square v-if="isRecording" class="size-4" />
+            <Mic v-else-if="!isTranscribing" class="size-4" />
+            <Spinner v-else class="size-4 animate-spin" />
+            <span class="sr-only">{{
+              isTranscribing ? 'Transcribing...' : isRecording ? 'Stop Recording' : 'Record'
+            }}</span>
           </InputGroupButton>
         </div>
       </InputGroupAddon>
