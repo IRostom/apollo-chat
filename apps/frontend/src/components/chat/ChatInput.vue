@@ -108,7 +108,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="sticky bottom-0 max-w-3xl w-full mx-auto pb-4 bg-white">
+  <div class="sticky bottom-0 max-w-3xl w-full mx-auto pb-4 bg-background">
     <InputGroup>
       <InputGroupAddon align="block-start">
         <div class="flex items-center justify-start gap-3">

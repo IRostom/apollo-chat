@@ -25,6 +25,7 @@
     "pnpm": ">=8.0.0"
   },
   "dependencies": {
+    "@vueuse/core": "^14.1.0",
     "multer": "^2.0.2"
   }
 }

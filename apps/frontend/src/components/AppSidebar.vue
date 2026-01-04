@@ -13,6 +13,8 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
+  SidebarTrigger,
+  useSidebar,
 } from '@/components/ui/sidebar'
 import { useChats } from '@/queries/chats'
 
@@ -23,6 +25,8 @@ const props = withDefaults(defineProps<SidebarProps>(), {
 })
 
 const { data: chats } = useChats()
+
+const { open, setOpen } = useSidebar()
 
 // This is sample data.
 const data = {
@@ -45,18 +49,20 @@ const data = {
   <Sidebar v-bind="props">
     <SidebarHeader>
       <SidebarMenu>
-        <SidebarMenuItem>
+        <SidebarMenuItem class="flex items-center justify-between">
           <SidebarMenuButton as-child class="data-[slot=sidebar-menu-button]:p-1.5!">
-            <RouterLink to="/">
+            <RouterLink to="/" v-if="open">
               <Sparkle class="size-5!" />
               <span class="text-base font-semibold">Apollo</span>
             </RouterLink>
+            <Sparkle v-else class="size-5!" @click="setOpen(true)" />
           </SidebarMenuButton>
+          <SidebarTrigger v-if="open" />
         </SidebarMenuItem>
       </SidebarMenu>
     </SidebarHeader>
     <SidebarContent>
-      <NavMain :items="data.navMain" />
+      <NavMain :items="data.navMain" class="sticky top-0 z-10 bg-sidebar" />
       <NavChats :chats="chats" />
     </SidebarContent>
     <SidebarFooter> </SidebarFooter>

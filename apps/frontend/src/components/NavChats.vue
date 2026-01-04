@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Folder, MoreHorizontal, Trash2 } from 'lucide-vue-next'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,11 +21,12 @@ import {
 defineProps<{
   chats: {
     title: string
-    id: string
+    id: string | number
   }[]
 }>()
 
 const { isMobile } = useSidebar()
+const route = useRoute()
 </script>
 
 <template>
@@ -33,7 +34,7 @@ const { isMobile } = useSidebar()
     <SidebarGroupLabel>Your Chats</SidebarGroupLabel>
     <SidebarMenu>
       <SidebarMenuItem v-for="chat in chats" :key="chat.id">
-        <SidebarMenuButton as-child>
+        <SidebarMenuButton as-child :is-active="chat.id.toString() === route.params.id">
           <RouterLink :to="'/' + chat.id">
             <span>{{ chat.title }}</span>
           </RouterLink>
