@@ -66,8 +66,7 @@ A modern, full-stack chat application built with Vue.js and Express.js, designed
 
 ### Advanced Features
 
-- [ ] Voice to text
-  - [ ] Attach files via voice
+- [x] Voice to text
 - [ ] Vercel SDK integration
 - [ ] RAG (Retrieval-Augmented Generation)
 - [ ] Translation and writing focused page
