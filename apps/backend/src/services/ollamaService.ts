@@ -10,6 +10,7 @@ export interface Model {
   thinking: boolean;
   tools: boolean;
   completion: boolean;
+  context_length: number;
 }
 
 export interface ModelsByFamily {
@@ -22,9 +23,17 @@ export async function listOllamaModelsByFamily(): Promise<ModelsByFamily> {
   const models = await Promise.all(
     modelNames.map(async (name) => {
       const response = await ollamaClient.show({ model: name });
+      const family = response.details.family;
+      let contextLength = 0;
+
+      contextLength =
+        (response.model_info as unknown as Record<string, number>)?.[
+          `${family}.context_length`
+        ] ?? undefined;
+
       return {
         name: name,
-        family: response.details.family,
+        family: family,
         families: response.details.families,
         parameter_size: response.details.parameter_size,
         quantization_level: response.details.quantization_level,
@@ -32,6 +41,7 @@ export async function listOllamaModelsByFamily(): Promise<ModelsByFamily> {
         thinking: response.capabilities.includes("thinking"),
         tools: response.capabilities.includes("tools"),
         completion: response.capabilities.includes("completion"),
+        context_length: contextLength,
       };
     })
   );

@@ -39,6 +39,7 @@ export interface Model {
   thinking: boolean
   tools: boolean
   completion: boolean
+  context_length: number
 }
 
 export interface ModelsByFamily {
