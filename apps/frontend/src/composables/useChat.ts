@@ -107,11 +107,11 @@ export function useChat() {
     const { displayMessage, serverMessage } = prepareMessageWithImages(message)
 
     await sendStreamMessage({
-      model: appStore.userSelectedModel,
+      model: appStore.userSelectedModelName!,
       displayMessage,
       serverMessage,
-      think: appStore.shouldThink,
-      webTools: appStore.useWebTools,
+      think: appStore.canThink && appStore.shouldThink,
+      webTools: appStore.canUseWebTools && appStore.useWebTools,
     })
 
     resetFiles()

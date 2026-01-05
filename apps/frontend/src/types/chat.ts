@@ -31,9 +31,18 @@ export interface Conversation {
 
 export interface Model {
   name: string
-  size?: number
-  digest?: string
-  modified_at?: string
+  family: string
+  families: string[]
+  parameter_size: string
+  quantization_level: string
+  vision: boolean
+  thinking: boolean
+  tools: boolean
+  completion: boolean
+}
+
+export interface ModelsByFamily {
+  [key: string]: Model[]
 }
 
 export type StreamFrameType =

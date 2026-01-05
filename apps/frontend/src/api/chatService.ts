@@ -123,17 +123,3 @@ export async function getConversations(): Promise<Conversation[]> {
 
   return response.json()
 }
-
-/**
- * Get available models
- */
-export async function getModels(): Promise<Model[]> {
-  const response = await fetch(getApiUrl(API_CONFIG.endpoints.models.list))
-
-  if (!response.ok) {
-    throw new Error(`network response failed: ${response.statusText}`)
-  }
-
-  const data = await response.json()
-  return data.models as Model[]
-}

@@ -8,12 +8,18 @@ import {
   Image,
   Mic,
   Square,
+  Eye,
+  Hammer,
 } from 'lucide-vue-next'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuPortal,
+  DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu'
 import {
   InputGroup,
@@ -25,7 +31,7 @@ import { Toggle } from '@/components/ui/toggle'
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useModels } from '@/queries/models'
-import type { ChatFile } from '@/types/chat'
+import type { ChatFile, Model } from '@/types/chat'
 import { useRecordAndTranscribe } from '@/composables/useRecordAndTranscribe'
 import Spinner from '../ui/spinner/Spinner.vue'
 
@@ -44,7 +50,9 @@ const emit = defineEmits<{
 }>()
 
 const appStore = useAppStore()
-const { data: models } = useModels()
+// TODO:
+const { data: modelsByFamily } = useModels()
+const modelFamilies = computed(() => Object.keys(modelsByFamily.value ?? {}))
 const { startRecording, stopRecordingAndTranscribe, isRecording, isTranscribing, canRecord } =
   useRecordAndTranscribe((result) => {
     console.log('transcribe result: ', result)
@@ -52,10 +60,13 @@ const { startRecording, stopRecordingAndTranscribe, isRecording, isTranscribing,
   })
 
 const userMsg = ref('')
-const userSelectedModel = computed(() => appStore.userSelectedModel)
+const userSelectedModelName = computed(() => appStore.userSelectedModelName)
+const canThink = computed(() => appStore.canThink)
+const canUseWebTools = computed(() => appStore.canUseWebTools)
+const supportsVision = computed(() => appStore.supportsVision)
 
 function send() {
-  if (props.disabled || !userSelectedModel.value?.length || !userMsg.value.trim()) {
+  if (props.disabled || !userSelectedModelName.value?.length || !userMsg.value.trim()) {
     return
   }
   emit('send', userMsg.value)
@@ -63,7 +74,7 @@ function send() {
 }
 
 function onEnterKey(e: KeyboardEvent) {
-  if (props.disabled || !userSelectedModel.value?.length || !userMsg.value.trim()) return
+  if (props.disabled || !userSelectedModelName.value?.length || !userMsg.value.trim()) return
   // If the user held Shift, we let the textarea handle it (newline)
   if (e.shiftKey) return
 
@@ -74,9 +85,13 @@ function onEnterKey(e: KeyboardEvent) {
   send()
 }
 
-function updateSelectedModel(model: string) {
+function updateSelectedModel(model: Model) {
   appStore.updateUserSelectedModel(model)
 }
+
+// function updateSelectedModelFamily(family: string) {
+//   appStore.updateUserSelectedModelFamily(family)
+// }
 
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
@@ -147,6 +162,7 @@ onUnmounted(() => {
           size="icon-sm"
           class="rounded-full"
           aria-label="Attach file"
+          :disabled="!supportsVision"
           @click="openFilePicker"
         >
           <Image />
@@ -162,6 +178,7 @@ onUnmounted(() => {
         <Toggle
           size="sm"
           :modelValue="appStore.shouldThink"
+          :disabled="!canThink"
           @update:modelValue="appStore.updateShouldThink"
           aria-label="Toggle think"
         >
@@ -171,8 +188,9 @@ onUnmounted(() => {
         <Toggle
           size="sm"
           :modelValue="appStore.useWebTools"
+          :disabled="!canUseWebTools"
           @update:modelValue="appStore.updateUseWebTools"
-          aria-label="Toggle think"
+          aria-label="Toggle web search"
         >
           <Globe class="h-4 w-4" />
           Search
@@ -180,18 +198,38 @@ onUnmounted(() => {
         <div class="ml-auto flex gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger as-child>
-              <InputGroupButton variant="ghost">
-                {{ userSelectedModel ?? 'Select Model' }}
+              <InputGroupButton variant="ghost" class="capitalize">
+                {{ userSelectedModelName ?? 'Select Model' }}
                 <ChevronDown />
               </InputGroupButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="start" class="[--radius:0.95rem]">
-              <DropdownMenuItem
-                v-for="model in models"
-                :key="model.name"
-                @click="updateSelectedModel(model.name)"
-                >{{ model.name }}</DropdownMenuItem
-              >
+              <DropdownMenuSub v-for="family in modelFamilies" :key="family">
+                <DropdownMenuSubTrigger class="capitalize">{{ family }}</DropdownMenuSubTrigger>
+                <DropdownMenuPortal>
+                  <DropdownMenuSubContent>
+                    <DropdownMenuItem
+                      v-for="model in modelsByFamily?.[family] ?? []"
+                      :key="model.name"
+                      @click="updateSelectedModel(model)"
+                      class="capitalize"
+                      >{{ model.name }}
+                      <div v-if="model.vision" class="border border-yellow-300 rounded py-0.5 px-1">
+                        <Eye class="size-4 text-yellow-300" />
+                      </div>
+                      <div v-if="model.tools" class="border border-blue-300 rounded py-0.5 px-1">
+                        <Hammer class="size-4 text-blue-300" />
+                      </div>
+                      <div
+                        v-if="model.thinking"
+                        class="border border-green-300 rounded py-0.5 px-1"
+                      >
+                        <Brain class="size-4 text-green-300" />
+                      </div>
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuPortal>
+              </DropdownMenuSub>
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -203,7 +241,7 @@ onUnmounted(() => {
             @click="send()"
             :disabled="
               disabled ||
-              !userSelectedModel?.length ||
+              !userSelectedModelName?.length ||
               isTranscribing ||
               isRecording ||
               !userMsg.trim().length

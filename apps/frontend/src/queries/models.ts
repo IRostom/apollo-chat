@@ -1,18 +1,9 @@
 import { useQuery } from '@tanstack/vue-query'
-import { getModels } from '@/api/chatService'
+import { getModels } from '@/api/models'
 
 export function useModels() {
-  const { isPending, isFetching, isError, data, error } = useQuery({
+  return useQuery({
     queryKey: ['models'],
-    queryFn: async () => {
-      return getModels()
-    },
-    initialData: [],
-    refetchInterval: 20000,
+    queryFn: getModels,
   })
-
-  return {
-    data,
-    isFetching,
-  }
 }

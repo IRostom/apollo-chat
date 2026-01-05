@@ -1,9 +1,5 @@
 import { Router, Request, Response } from "express";
-import { db } from "../db/client";
-import { chatsTable, messagesTable } from "../db/schema";
-import { eq } from "drizzle-orm";
 import ollama from "ollama";
-import { body } from "express-validator";
 
 const router = Router();
 
@@ -17,9 +13,18 @@ router.get("/ollama/ps", async (req: Request, res: Response) => {
   res.json(ps);
 });
 
+router.post(
+  "/ollama/models/pull/:model",
+  async (req: Request, res: Response) => {
+    const { model } = req.params;
+    const response = await ollama.pull({ model, stream: false });
+    res.json(response);
+  }
+);
+
 router.post("/ollama/models/:model", async (req: Request, res: Response) => {
   const { model } = req.params;
-  const response = await ollama.pull({ model, stream: false });
+  const response = await ollama.show({ model });
   res.json(response);
 });
 

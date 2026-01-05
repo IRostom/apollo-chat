@@ -1,15 +1,24 @@
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
+import type { Model } from '@/types/chat'
 
 export const useAppStore = defineStore(
   'app',
   () => {
-    const userSelectedModel = ref<string | undefined>(undefined)
+    const userSelectedModel = ref<Model | undefined>(undefined)
+    const userSelectedModelFamily = ref<string | undefined>(undefined)
+    const userSelectedModelName = computed(() => userSelectedModel.value?.name)
+    const canThink = computed(() => userSelectedModel.value?.thinking ?? false)
     const shouldThink = ref(false)
+    const canUseWebTools = computed(() => userSelectedModel.value?.tools ?? false)
     const useWebTools = ref(false)
+    const supportsVision = computed(() => userSelectedModel.value?.vision ?? false)
 
-    function updateUserSelectedModel(v: string | undefined) {
+    function updateUserSelectedModel(v: Model | undefined) {
       userSelectedModel.value = v
+    }
+    function updateUserSelectedModelFamily(v: string | undefined) {
+      userSelectedModelFamily.value = v
     }
     function updateShouldThink(v: boolean) {
       shouldThink.value = v
@@ -20,9 +29,15 @@ export const useAppStore = defineStore(
 
     return {
       userSelectedModel,
+      userSelectedModelFamily,
+      userSelectedModelName,
+      canThink,
+      canUseWebTools,
       shouldThink,
       useWebTools,
+      supportsVision,
       updateUserSelectedModel,
+      updateUserSelectedModelFamily,
       updateShouldThink,
       updateUseWebTools,
     }

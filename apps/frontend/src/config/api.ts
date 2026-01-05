@@ -16,7 +16,7 @@ export const API_CONFIG = {
       get: (id: string) => `/conversations/${id}`,
     },
     models: {
-      list: '/ollama/models',
+      list: '/models',
     },
     upload: {
       file: '/upload',
