@@ -45,8 +45,8 @@ COPY apps/frontend/nginx.conf /etc/nginx/nginx.conf
 # nginx serves files from /usr/share/nginx/html by default
 COPY --from=build /app/apps/frontend/dist /usr/share/nginx/html
 
-# Expose port 80 (standard HTTP port)
-EXPOSE 80
+# Expose port 8080 (matches nginx.conf `listen 8080;`)
+EXPOSE 8080
 
 # nginx runs in foreground by default with this config
 CMD ["nginx", "-g", "daemon off;"]
