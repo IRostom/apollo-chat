@@ -161,6 +161,67 @@ pnpm dev:frontend
 
 Make sure you have Ollama running locally. The backend will connect to Ollama's default endpoint (`http://localhost:11434`).
 
+## Docker Support (Docker Compose)
+
+Apollo Chat can be run in a production-like setup using Docker Compose:
+
+- **Frontend**: built and served by **nginx** (and proxies `/api/*` to the backend)
+- **Backend**: Express API (runs DB migrations on container start)
+- **Persistence**: named Docker volumes for the SQLite DB and uploaded files
+
+### Prerequisites
+
+- **Docker** + **Docker Compose**
+- **Ollama running on the host machine**
+  - For Docker containers to reach Ollama, Ollama must **listen on `0.0.0.0`** (not just `127.0.0.1`).
+  - Start it like:
+
+```bash
+OLLAMA_HOST=0.0.0.0:11434 ollama serve
+```
+
+### Run (Build + Start)
+
+From the repo root:
+
+```bash
+docker compose up --build
+```
+
+Then open:
+
+- **Frontend**: `http://localhost:8080`
+- **Backend (internal)**: available to the frontend via nginx at `http://localhost:8080/api/*`
+
+### How Ollama Works in Docker
+
+The backend container connects to Ollama via the `OLLAMA_HOST` environment variable.
+
+In `docker-compose.yml`, `host.docker.internal` is mapped to the host gateway so the container can reach Ollama running on your machine:
+
+- `OLLAMA_HOST=http://host.docker.internal:11434`
+
+If your Ollama server is on a different host/port, change `OLLAMA_HOST` in `docker-compose.yml`.
+
+### Data Persistence (DB + Uploads)
+
+Compose creates named volumes:
+
+- `apollo-chat_db-data` (SQLite database at `/app/data/history.db`)
+- `apollo-chat_uploads-data` (uploaded files at `/app/apps/backend/uploads`)
+
+To stop containers:
+
+```bash
+docker compose down
+```
+
+To also remove volumes (deletes DB + uploads):
+
+```bash
+docker compose down -v
+```
+
 ### Available Scripts
 
 #### Root Level
@@ -195,7 +256,7 @@ Make sure you have Ollama running locally. The backend will connect to Ollama's 
 
 ## Installation
 
-> **Coming Soon** - Installation instructions for production deployment will be added here.
+> **Note**: For a production-like local deployment, use the **Docker Compose** instructions above. More deployment options will be added here later.
 
 ## Project Structure
 
