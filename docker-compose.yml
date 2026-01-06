@@ -1,0 +1,63 @@
+# Docker Compose configuration for Apollo Chat
+# Run with: docker-compose up --build
+#
+# NETWORK MODE: host
+# Both containers share the host's network directly.
+# This means localhost:3000 in the container = localhost:3000 on your machine.
+# Simpler networking, but no isolation between services.
+
+services:
+  # Backend API service
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    # Host network mode - container shares host's network stack
+    # No port mapping needed, backend runs directly on host's localhost:3000
+    network_mode: host
+    environment:
+      # Database path - points to mounted volume
+      - DB_FILE_NAME=file:/app/data/history.db
+      # Ollama is on localhost since we're using host network
+      - OLLAMA_HOST=http://localhost:11434
+      - PORT=3000
+    volumes:
+      # Named volume for database persistence
+      - db-data:/app/data
+      # Mount uploads directory for file persistence
+      - uploads-data:/app/apps/backend/uploads
+    # Health check to ensure backend is ready before frontend starts
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--spider",
+          "http://localhost:3000/conversations",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Frontend service
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+    # Host network mode - nginx runs directly on host's localhost:8080
+    network_mode: host
+    # Wait for backend to be healthy before starting
+    depends_on:
+      backend:
+        condition: service_healthy
+
+# Named volumes - Docker manages where these are stored on disk
+# Data persists even after 'docker-compose down'
+# Use 'docker-compose down -v' to delete volumes
+volumes:
+  db-data:
+    name: apollo-chat_db-data
+  uploads-data:
+    name: apollo-chat_uploads-data
