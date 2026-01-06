@@ -1,0 +1,65 @@
+# Docker Compose configuration for Apollo Chat
+# Run with: docker-compose up --build
+
+services:
+  # Backend API service
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    networks:
+      - frontnet
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # Database path - points to mounted volume
+      - DB_FILE_NAME=file:/app/data/history.db
+      # Ollama is on localhost since we're using host network
+      - OLLAMA_HOST=http://host.docker.internal:11434
+      - PORT=3000
+    volumes:
+      # Named volume for database persistence
+      - db-data:/app/data
+      # Mount uploads directory for file persistence
+      - uploads-data:/app/apps/backend/uploads
+    # Health check to ensure backend is ready before frontend starts
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--spider",
+          "http://localhost:3000/conversations",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Frontend service
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+    networks:
+      - frontnet
+    # Wait for backend to be healthy before starting
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+# Named volumes - Docker manages where these are stored on disk
+# Data persists even after 'docker-compose down'
+# Use 'docker-compose down -v' to delete volumes
+volumes:
+  db-data:
+    name: apollo-chat_db-data
+  uploads-data:
+    name: apollo-chat_uploads-data
+
+networks:
+  frontnet:
+    driver: bridge
