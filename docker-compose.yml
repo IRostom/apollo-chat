@@ -17,6 +17,8 @@ services:
       # Ollama is on localhost since we're using host network
       - OLLAMA_HOST=http://host.docker.internal:11434
       - PORT=3000
+      # Ollama API key for web search functionality
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY}
     volumes:
       # Named volume for database persistence
       - db-data:/app/data
