@@ -83,7 +83,21 @@ router.post(
         filename: req.file.filename,
       });
     } catch (error) {
-      console.error("Transcription error:", error);
+      if (
+        error instanceof Error &&
+        error.message.includes("CUDA out of memory")
+      ) {
+        console.error(
+          "Transcription error: CUDA out of memory. Please try a different model."
+        );
+        return res.status(500).json({
+          error: "CUDA out of memory. Please try a different model.",
+        });
+      }
+      console.error(
+        "Transcription error:",
+        error instanceof Error ? error.message : "Unknown error"
+      );
       res.status(500).json({
         error: "Transcription failed",
         details: error instanceof Error ? error.message : "Unknown error",

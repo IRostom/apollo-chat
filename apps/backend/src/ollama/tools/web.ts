@@ -42,11 +42,21 @@ export const webTools = {
     query: string;
     max_results?: number;
   }): Promise<WebSearchResponse> => {
-    const res = await ollamaClient.webSearch(args);
-    return res as WebSearchResponse;
+    try {
+      const res = await ollamaClient.webSearch(args);
+      return res as WebSearchResponse;
+    } catch (error) {
+      console.error("Error calling webSearch:", error);
+      throw new Error("Error calling webSearch: " + error);
+    }
   },
   webFetch: async (args: { url: string }): Promise<WebFetchResponse> => {
-    const res = await ollamaClient.webFetch(args);
-    return res as WebFetchResponse;
+    try {
+      const res = await ollamaClient.webFetch(args);
+      return res as WebFetchResponse;
+    } catch (error) {
+      console.error("Error calling webFetch:", error);
+      throw new Error("Error calling webFetch: " + error);
+    }
   },
 };
