@@ -7,7 +7,7 @@ import {
   webTools as availableWebTools,
 } from "../ollama/tools/web";
 import { ollamaClient } from "../ollama/client";
-import { Message } from "ollama";
+import { AbortableAsyncIterator, ChatResponse, Message } from "ollama";
 import { frame } from "../utils/frame";
 import { convertImageIdsToBase64 } from "../utils/imageUtils";
 import { PingOllama } from "../services/ollamaService";
@@ -63,12 +63,17 @@ router.post(
     res.setHeader("Content-Type", "application/x-ndjson");
     res.setHeader("Transfer-Encoding", "chunked");
 
+    // Hoisted variables for error handling access
+    let convId = conversationId;
+    let fullReply = "";
+    let thinkingResponse = "";
+    let ollamaResponse: AbortableAsyncIterator<ChatResponse> | null = null;
+
     try {
       // ---- Send start frame ----
       res.write(frame("start"));
 
       // ---- Create / resolve conversation ----
-      let convId = conversationId;
       if (!convId) {
         const chatRes = await createChat({
           title: clientMessage.content.slice(0, 20),
@@ -138,16 +143,17 @@ router.post(
 
       while (true) {
         // ---- Stream model output ----
-        const ollamaResponse = await ollamaClient.chat({
+        ollamaResponse = await ollamaClient.chat({
           model,
           messages: [...chatHistory],
           stream: true,
           think: think ?? false,
-          tools: (webTools ? [webSearchTool, webFetchTool] : []),
+          tools: webTools ? [webSearchTool, webFetchTool] : [],
         } as any);
 
-        let fullReply = "";
-        let thinkingResponse = "";
+        // Reset for each iteration (tool call loop)
+        fullReply = "";
+        thinkingResponse = "";
         let inThinking = false;
         let hadToolCalls = false;
         let metadata: { [key: string]: any } = {};
@@ -297,8 +303,27 @@ router.post(
     } catch (err) {
       console.error(err);
 
+      // Abort ongoing Ollama stream to free resources
+      if (ollamaResponse) {
+        ollamaResponse.abort();
+      }
+
       // Check if headers have already been sent (streaming started)
       if (res.headersSent) {
+        // Save partial response to DB before ending
+        if (convId) {
+          await addMessageToChat({
+            conversation_id: +convId,
+            content: fullReply ?? "",
+            role: "assistant",
+            thinking: thinkingResponse || undefined,
+            metadata: JSON.stringify({
+              done: false,
+              done_reason: "server_error",
+            }),
+          });
+        }
+
         // Write error frame to stream and end it
         res.write(
           frame("error", {

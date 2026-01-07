@@ -37,6 +37,7 @@ export const webFetchTool = {
   },
 };
 
+// TODO: instead of throwing errors, return a string with the error message
 export const webTools = {
   webSearch: async (args: {
     query: string;
