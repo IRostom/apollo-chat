@@ -10,11 +10,23 @@ export function useVoiceRecording(onRecordSuccess?: (blob: Blob) => void) {
   const mediaStream = ref<MediaStream | null>(null)
 
   onMounted(async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      console.log('MediaDevices.getUserMedia() not supported on your browser!')
+    if (!navigator.mediaDevices?.enumerateDevices) {
       canRecord.value = false
       return
     }
+
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      const hasAudioInput = devices.some((device) => device.kind === 'audioinput')
+      canRecord.value = hasAudioInput
+    } catch (error) {
+      console.log('Failed to enumerate devices:', (error as Error).message)
+      canRecord.value = false
+    }
+  })
+
+  async function startRecording() {
+    if (!canRecord.value) return
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -32,22 +44,21 @@ export function useVoiceRecording(onRecordSuccess?: (blob: Blob) => void) {
         audioUrl.value = URL.createObjectURL(wavBlob)
         isRecording.value = false
         onRecordSuccess?.(wavBlob)
+
+        // Release the microphone
+        mediaStream.value?.getTracks().forEach((track) => track.stop())
+        mediaStream.value = null
       }
 
-      canRecord.value = true
+      audioBlob.value = null
+      audioUrl.value = null
+      audioChunks.value = []
+      isRecording.value = true
+      mediaRecorder.value.start()
     } catch (error) {
-      console.log('Failed to get audio input:', (error as Error).message)
+      console.log('Failed to start recording:', (error as Error).message)
       canRecord.value = false
     }
-  })
-
-  function startRecording() {
-    if (!canRecord.value || !mediaRecorder.value) return
-    audioBlob.value = null
-    audioUrl.value = null
-    audioChunks.value = []
-    isRecording.value = true
-    mediaRecorder.value.start()
   }
 
   function stopRecording() {
