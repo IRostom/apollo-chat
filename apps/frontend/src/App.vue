@@ -15,6 +15,8 @@ import { Button } from '@/components/ui/button'
 import { Moon, Sun } from 'lucide-vue-next'
 import { useCopyCode } from 'markdown-it-copy-code'
 import { onMounted } from 'vue'
+import { Toaster } from '@/components/ui/sonner'
+import 'vue-sonner/style.css'
 
 const mode = useColorMode({
   initialValue: 'auto',
@@ -65,6 +67,7 @@ onMounted(() => {
       </ScrollArea>
     </SidebarInset>
   </SidebarProvider>
+  <Toaster position="top-center" :duration="5000" />
 </template>
 
 <style scoped></style>

@@ -97,7 +97,8 @@ export async function getConversation(id: string): Promise<ChatMessage[]> {
   const response = await fetch(getApiUrl(API_CONFIG.endpoints.conversations.get(id)))
 
   if (!response.ok) {
-    throw new Error(`network response failed: ${response.statusText}`)
+    const res = await response.json()
+    throw new Error(res.error || 'Failed to fetch chat history')
   }
 
   const json: ChatMessageServer[] = await response.json()

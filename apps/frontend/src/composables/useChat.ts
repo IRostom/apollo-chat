@@ -12,6 +12,8 @@ import { renderMarkdown } from './useMarkdown'
 import { useAppStore } from '@/stores/app'
 import type { ChatMessage } from '@/types/chat'
 import { useUploadFile } from '@/queries/upload'
+import { toast } from 'vue-sonner'
+import { useQueryClient } from '@tanstack/vue-query'
 
 /**
  * Chat state and operations
@@ -21,6 +23,7 @@ export function useChat() {
   const { conversationId, skipRefetchForId, navigateToConversation } = useConversationRoute()
   const appStore = useAppStore()
   const { files, uploadFile, reset: resetFiles } = useUploadFile()
+  const queryClient = useQueryClient()
 
   const {
     send: sendStreamMessage,
@@ -31,7 +34,20 @@ export function useChat() {
     resetMessages,
   } = useChatStream(conversationId)
 
-  const { data: chatHistoryServer } = useChatHistory(conversationId, skipRefetchForId)
+  const {
+    data: chatHistoryServer,
+    isError: isChatHistoryError,
+    error: chatHistoryError,
+  } = useChatHistory(conversationId, skipRefetchForId)
+
+  watch(isChatHistoryError, (isChatHistoryError) => {
+    if (isChatHistoryError) {
+      console.log('chatHistoryError: ', chatHistoryError.value)
+      toast.error('Failed to fetch chat history', {
+        description: chatHistoryError.value?.message,
+      })
+    }
+  })
 
   // Transform server history with markdown rendering
   const chatHistoryServerWithMd = computed(() => {
@@ -57,6 +73,7 @@ export function useChat() {
   // Navigate when a new conversation is created
   watch(newConversationId, (id) => {
     if (id) {
+      queryClient.invalidateQueries({ queryKey: ['chats'] })
       navigateToConversation(id)
     }
   })

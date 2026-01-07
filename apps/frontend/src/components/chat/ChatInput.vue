@@ -34,6 +34,7 @@ import { useModels } from '@/queries/models'
 import type { ChatFile, Model } from '@/types/chat'
 import { useRecordAndTranscribe } from '@/composables/useRecordAndTranscribe'
 import Spinner from '../ui/spinner/Spinner.vue'
+import { toast } from 'vue-sonner'
 
 interface Props {
   disabled?: boolean
@@ -51,13 +52,22 @@ const emit = defineEmits<{
 
 const appStore = useAppStore()
 // TODO:
-const { data: modelsByFamily } = useModels()
+const { data: modelsByFamily, isError: isModelsError, error: modelsError } = useModels()
 const modelFamilies = computed(() => Object.keys(modelsByFamily.value ?? {}))
 const { startRecording, stopRecordingAndTranscribe, isRecording, isTranscribing, canRecord } =
   useRecordAndTranscribe((result) => {
     console.log('transcribe result: ', result)
     userMsg.value = result
   })
+
+watch(isModelsError, (isModelsError) => {
+  if (isModelsError) {
+    console.log('modelsError: ', modelsError.value?.message)
+    toast.error('Failed to fetch models', {
+      description: modelsError.value?.message,
+    })
+  }
+})
 
 const userMsg = ref('')
 const userSelectedModelName = computed(() => appStore.userSelectedModelName)

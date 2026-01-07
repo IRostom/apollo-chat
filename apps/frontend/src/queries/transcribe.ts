@@ -16,8 +16,8 @@ export async function transcribe(audio: Blob, model?: string): Promise<Transcrip
     body: formData,
   })
   if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`Transcribe failed (${response.status} ${response.statusText}): ${text}`)
+    const res = await response.json()
+    throw new Error(res.error || 'Transcribe failed')
   }
   return response.json()
 }

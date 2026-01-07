@@ -10,7 +10,12 @@ router.get("/models", async (req: Request, res: Response) => {
     res.json(models);
   } catch (error) {
     console.error("models/: Error listing models:", error);
-    res.status(500).json({ error: "Failed to list models: " + error });
+    res
+      .status(500)
+      .json({
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
   }
 });
 

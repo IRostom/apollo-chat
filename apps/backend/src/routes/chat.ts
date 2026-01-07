@@ -143,7 +143,7 @@ router.post(
           messages: [...chatHistory],
           stream: true,
           think: think ?? false,
-          tools: [...(webTools ? [webSearchTool, webFetchTool] : [])],
+          tools: (webTools ? [webSearchTool, webFetchTool] : []),
         } as any);
 
         let fullReply = "";

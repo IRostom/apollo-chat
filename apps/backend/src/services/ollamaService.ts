@@ -18,6 +18,12 @@ export interface ModelsByFamily {
 }
 
 export async function listOllamaModelsByFamily(): Promise<ModelsByFamily> {
+  const isOllamaRunning = await PingOllama();
+  if (!isOllamaRunning) {
+    throw new Error(
+      "OLLAMA is not running or we are not able to connect to it"
+    );
+  }
   try {
     const response = await ollamaClient.list();
     const modelNames = response.models.map((model) => model.name);
@@ -57,7 +63,10 @@ export async function listOllamaModelsByFamily(): Promise<ModelsByFamily> {
     return modelsByFamily;
   } catch (error: any) {
     console.error("Error listing OLLAMA models by family:", error);
-    throw new Error("Failed to list models: " + error);
+    throw new Error(
+      "Failed to list models: " +
+        (error instanceof Error ? error.message : "Unknown error")
+    );
   }
 }
 

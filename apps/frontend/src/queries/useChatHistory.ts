@@ -15,7 +15,7 @@ export function useChatHistory(
   chatId: Ref<string | undefined> | ComputedRef<string | undefined>,
   skipRefetchForId?: Ref<string | undefined>,
 ) {
-  const { isPending, isFetching, isError, data, error } = useQuery({
+  return useQuery({
     queryKey: ['chat', chatId],
     queryFn: async () => {
       if (!chatId.value) {
@@ -31,9 +31,4 @@ export function useChatHistory(
       return !!chatId.value
     },
   })
-
-  return {
-    data,
-    isFetching,
-  }
 }
