@@ -10,6 +10,7 @@ export const API_CONFIG = {
   endpoints: {
     chat: {
       stream: '/chat/stream',
+      retry: '/chat/stream/retry',
     },
     conversations: {
       list: '/conversations',

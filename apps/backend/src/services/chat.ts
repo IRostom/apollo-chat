@@ -1,6 +1,6 @@
 import { db } from "../db/client";
 import { chatsTable, messagesTable } from "../db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 
 export async function createChat(chat: typeof chatsTable.$inferInsert) {
   const [conv] = await db
@@ -21,4 +21,26 @@ export async function addMessageToChat(
   message: typeof messagesTable.$inferInsert
 ) {
   return db.insert(messagesTable).values(message);
+}
+
+export async function getMessageById(id: number) {
+  const [message] = await db
+    .select()
+    .from(messagesTable)
+    .where(eq(messagesTable.id, id));
+  return message;
+}
+
+export async function deleteMessagesAfterUserMessage(
+  conversationId: number,
+  userMessageId: number
+) {
+  return db
+    .delete(messagesTable)
+    .where(
+      and(
+        eq(messagesTable.conversation_id, conversationId),
+        gt(messagesTable.id, userMessageId)
+      )
+    );
 }

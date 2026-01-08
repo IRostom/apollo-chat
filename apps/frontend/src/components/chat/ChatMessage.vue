@@ -3,9 +3,10 @@ import type { ChatMessage } from '@/types/chat'
 import { computed } from 'vue'
 import Spinner from '@/components/ui/spinner/Spinner.vue'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { ChevronDown, ChevronUp, Globe } from 'lucide-vue-next'
+import { ChevronDown, ChevronUp, Globe, AlertCircle, RotateCcw } from 'lucide-vue-next'
 import { getImageUrl } from '@/config/api'
 import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 
 interface Props {
   message: ChatMessage
@@ -17,9 +18,14 @@ const props = withDefaults(defineProps<Props>(), {
   isLoading: false,
 })
 
+const emit = defineEmits<{
+  retry: []
+}>()
+
 const isUser = computed(() => props.message.role === 'user')
 const isAssistant = computed(() => props.message.role === 'assistant')
 const isTool = computed(() => props.message.role === 'tool')
+const hasError = computed(() => props.message.isError === true)
 
 const toolResult = computed(() => {
   if (!isTool.value) {
@@ -35,7 +41,7 @@ const toolResult = computed(() => {
 
 <template>
   <Spinner
-    v-if="isLoading && isAssistant && (!message.content.length || !message.thinking?.length)"
+    v-if="isLoading && isAssistant && !message.content.length && !message.thinking?.length"
   />
 
   <div v-else-if="isUser" class="flex flex-col gap-2">
@@ -71,6 +77,19 @@ const toolResult = computed(() => {
       </CollapsibleContent>
     </Collapsible>
     <div v-html="message.content"></div>
+
+    <!-- Error state with retry button -->
+    <div
+      v-if="hasError"
+      class="mt-4 flex items-center gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive"
+    >
+      <AlertCircle class="h-5 w-5 flex-shrink-0" />
+      <span class="flex-1 text-sm">An error occurred while generating a response.</span>
+      <Button variant="outline" size="sm" class="gap-2" @click="emit('retry')">
+        <RotateCcw class="h-4 w-4" />
+        Retry
+      </Button>
+    </div>
   </div>
 
   <div v-else-if="isTool" class="mx-auto dark:prose-invert prose lg:prose-lg flex flex-col">

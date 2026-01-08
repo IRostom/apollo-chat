@@ -27,11 +27,14 @@ export function useChat() {
 
   const {
     send: sendStreamMessage,
+    retry: retryStreamMessage,
     isStreaming,
     isThinking,
     newConversationId,
+    streamError,
     messages: localHistory,
     resetMessages,
+    clearError,
   } = useChatStream(conversationId)
 
   const {
@@ -141,12 +144,55 @@ export function useChat() {
     uploadFile(file)
   }
 
+  /**
+   * Retry the last failed message
+   * Uses the server-side retry endpoint to delete old messages and regenerate
+   */
+  async function retryLastMessage() {
+    if (!appStore.userSelectedModel) {
+      throw new Error('No model selected. Please select a model before retrying.')
+    }
+
+    if (!conversationId.value) {
+      console.error('Cannot retry without a conversation ID')
+      return
+    }
+
+    // Clear the error state
+    clearError()
+
+    // Find the last assistant message with an error (from server or local history)
+    const allMessages = [...(chatHistoryServer.value ?? []), ...localHistory.value]
+    const lastAssistantMessage = allMessages.findLast(
+      (msg) => msg.role === 'assistant' && msg.isError,
+    )
+
+    if (!lastAssistantMessage?.id) {
+      console.error('No failed assistant message found to retry')
+      return
+    }
+
+    // Call the retry endpoint with the assistant message ID
+    await retryStreamMessage({
+      messageId: lastAssistantMessage.id,
+      model: appStore.userSelectedModelName!,
+      think: appStore.canThink && appStore.shouldThink,
+      webTools: appStore.canUseWebTools && appStore.useWebTools,
+      onInvalidate: () => {
+        // Invalidate the chat history query to refetch from server
+        queryClient.invalidateQueries({ queryKey: ['chat', conversationId] })
+      },
+    })
+  }
+
   return {
     chatMd: combinedChatMd,
     files,
     isStreaming,
     isThinking,
+    streamError,
     sendMessage,
     attachImageToChat,
+    retryLastMessage,
   }
 }

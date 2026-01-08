@@ -9,6 +9,7 @@ import type {
   ChatMessageServer,
   Conversation,
   Model,
+  RetryMessageOptions,
   SendMessageOptions,
   StreamFrame,
 } from '@/types/chat'
@@ -91,6 +92,91 @@ export async function sendMessage(
 }
 
 /**
+ * Retry a message and stream the response
+ */
+export async function retryMessage(
+  options: RetryMessageOptions,
+  onFrame: StreamHandler,
+): Promise<void> {
+  const { messageId, conversationId, model, think, webTools } = options
+
+  const response = await fetch(getApiUrl(API_CONFIG.endpoints.chat.retry), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      messageId,
+      conversationId,
+      model,
+      think,
+      webTools,
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+
+  if (!response.body) {
+    throw new Error('Response body is null')
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+
+    if (done) {
+      break
+    }
+
+    // Decode the chunk and add to buffer
+    buffer += decoder.decode(value, { stream: true })
+
+    // Process complete lines (NDJSON format)
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || '' // Keep incomplete line in buffer
+
+    for (const line of lines) {
+      if (!line.trim()) continue
+
+      try {
+        const frame = JSON.parse(line) as StreamFrame
+        onFrame(frame)
+      } catch (parseError) {
+        console.error('Error parsing frame:', parseError, 'Line:', line)
+      }
+    }
+  }
+
+  // Process any remaining buffer
+  if (buffer.trim()) {
+    try {
+      const frame = JSON.parse(buffer) as StreamFrame
+      onFrame(frame)
+    } catch (e) {
+      // Ignore parse errors for incomplete frames
+    }
+  }
+}
+
+/**
+ * Check if a message has a server error based on its metadata
+ */
+function hasServerError(metadata?: string): boolean {
+  if (!metadata) return false
+  try {
+    const parsed = JSON.parse(metadata)
+    return parsed.done === false && parsed.done_reason === 'server_error'
+  } catch {
+    return false
+  }
+}
+
+/**
  * Get a conversation by ID
  */
 export async function getConversation(id: string): Promise<ChatMessage[]> {
@@ -103,9 +189,11 @@ export async function getConversation(id: string): Promise<ChatMessage[]> {
 
   const json: ChatMessageServer[] = await response.json()
   const mapped = json.map((m) => {
+    const isError = m.role === 'assistant' && hasServerError(m.metadata)
     return {
       ...m,
       toolName: m.tool_name,
+      isError,
     }
   })
 
