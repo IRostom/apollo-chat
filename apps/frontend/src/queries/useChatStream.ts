@@ -3,9 +3,122 @@
  * Handles streaming state and frame processing for chat messages
  */
 
-import { computed, ref, type Ref } from 'vue'
+import { computed, ref, type ComputedRef, type Ref } from 'vue'
 import { retryMessage, sendMessage } from '@/api/chatService'
 import type { ChatMessage, RetryMessageOptions, StreamFrame } from '@/types/chat'
+
+/**
+ * Options for creating a frame handler
+ */
+interface FrameHandlerOptions {
+  messages: Ref<ChatMessage[]>
+  currIndex: ComputedRef<number>
+  isStreaming: Ref<boolean>
+  isThinking: Ref<boolean>
+  streamError: Ref<string | null>
+  newConversationId?: Ref<string>
+  onInvalidate?: () => void
+}
+
+/**
+ * Creates a frame handler function for processing stream frames
+ * Centralizes all frame type processing logic
+ */
+function createFrameHandler(options: FrameHandlerOptions): (frame: StreamFrame) => void {
+  const {
+    messages,
+    currIndex,
+    isStreaming,
+    isThinking,
+    streamError,
+    newConversationId,
+    onInvalidate,
+  } = options
+
+  return (frame: StreamFrame) => {
+    switch (frame.type) {
+      case 'start':
+        isStreaming.value = true
+        break
+
+      case 'invalidate':
+        // Server deleted old messages, clear local history and signal cache invalidation
+        messages.value = []
+        onInvalidate?.()
+        break
+
+      case 'role':
+        // Push placeholder for new message
+        if (frame.value) {
+          messages.value.push({
+            role: frame.value.toString() as ChatMessage['role'],
+            content: '',
+            thinking: '',
+          })
+        }
+        break
+
+      case 'isThinking':
+        if (
+          frame.value !== undefined &&
+          frame.value !== null &&
+          typeof frame.value === 'boolean'
+        ) {
+          isThinking.value = frame.value
+        }
+        break
+
+      case 'thinking':
+        if (frame.value) {
+          messages.value[currIndex.value]!.thinking =
+            messages.value[currIndex.value]!.thinking! + frame.value
+        }
+        break
+
+      case 'conversationId':
+        // Update conversationId from server response
+        if (frame.value && newConversationId) {
+          newConversationId.value = frame.value.toString()
+        }
+        break
+
+      case 'token':
+        // Accumulate tokens
+        if (frame.value) {
+          messages.value[currIndex.value]!.content += frame.value
+        }
+        break
+
+      case 'toolName':
+        if (frame.value) {
+          messages.value[currIndex.value]!.toolName = frame.value as string
+        }
+        break
+
+      case 'toolValue':
+        if (frame.value) {
+          messages.value[currIndex.value]!.content = frame.value as string
+        }
+        break
+
+      case 'end':
+        isStreaming.value = false
+        break
+
+      case 'error':
+        // Error occurred - mark the current assistant message as failed
+        isStreaming.value = false
+        streamError.value = frame.message || 'Unknown error occurred'
+        if (currIndex.value >= 0 && messages.value[currIndex.value]) {
+          messages.value[currIndex.value]!.isError = true
+        }
+        break
+
+      default:
+        console.warn('Unknown frame type:', frame.type)
+    }
+  }
+}
 
 /**
  * Manages chat streaming state and message accumulation
@@ -18,6 +131,20 @@ export function useChatStream(conversationId: Ref<string | undefined>) {
   const messages: Ref<ChatMessage[]> = ref([])
   const streamError: Ref<string | null> = ref(null)
   const currIndex = computed(() => messages.value.length - 1)
+
+  /**
+   * Handle stream errors consistently
+   */
+  const handleStreamError = (error: unknown, context: string) => {
+    isStreaming.value = false
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+    streamError.value = errorMessage
+    // Mark the last assistant message as failed if it exists
+    if (currIndex.value >= 0 && messages.value[currIndex.value]?.role === 'assistant') {
+      messages.value[currIndex.value]!.isError = true
+    }
+    console.error(`Error in chat stream ${context}:`, error)
+  }
 
   /**
    * Send a message and handle the streaming response
@@ -51,95 +178,17 @@ export function useChatStream(conversationId: Ref<string | undefined>) {
           think,
           webTools,
         },
-        (frame: StreamFrame) => {
-          switch (frame.type) {
-            case 'start':
-              // Stream started
-              isStreaming.value = true
-              break
-
-            case 'role':
-              // Push placeholder for new message
-              if (frame.value) {
-                messages.value.push({
-                  role: frame.value.toString() as ChatMessage['role'],
-                  content: '',
-                  thinking: '',
-                })
-              }
-              break
-
-            case 'isThinking':
-              if (
-                frame.value !== undefined &&
-                frame.value !== null &&
-                typeof frame.value === 'boolean'
-              ) {
-                isThinking.value = frame.value
-              }
-              break
-
-            case 'thinking':
-              if (frame.value) {
-                messages.value[currIndex.value]!.thinking =
-                  messages.value[currIndex.value]!.thinking! + frame.value
-              }
-              break
-
-            case 'conversationId':
-              // Update conversationId from server response
-              if (frame.value) {
-                newConversationId.value = frame.value.toString()
-              }
-              break
-
-            case 'token':
-              // Accumulate tokens
-              if (frame.value) {
-                messages.value[currIndex.value]!.content += frame.value
-              }
-              break
-
-            case 'toolName':
-              if (frame.value) {
-                messages.value[currIndex.value]!.toolName = frame.value as string
-              }
-              break
-
-            case 'toolValue':
-              if (frame.value) {
-                messages.value[currIndex.value]!.content = frame.value as string
-              }
-              break
-
-            case 'end':
-              // Stream completed
-              isStreaming.value = false
-              break
-
-            case 'error':
-              // Error occurred - mark the current assistant message as failed
-              isStreaming.value = false
-              streamError.value = frame.message || 'Unknown error occurred'
-              if (currIndex.value >= 0 && messages.value[currIndex.value]) {
-                messages.value[currIndex.value]!.isError = true
-              }
-              break
-
-            default:
-              console.warn('Unknown frame type:', frame.type)
-          }
-        },
+        createFrameHandler({
+          messages,
+          currIndex,
+          isStreaming,
+          isThinking,
+          streamError,
+          newConversationId,
+        }),
       )
     } catch (error) {
-      isStreaming.value = false
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
-      streamError.value = errorMessage
-      // Mark the last assistant message as failed if it exists
-      if (currIndex.value >= 0 && messages.value[currIndex.value]?.role === 'assistant') {
-        messages.value[currIndex.value]!.isError = true
-      }
-      console.error('Error in chat stream:', error)
+      handleStreamError(error, '')
     }
   }
 
@@ -178,94 +227,17 @@ export function useChatStream(conversationId: Ref<string | undefined>) {
           think,
           webTools,
         },
-        (frame: StreamFrame) => {
-          switch (frame.type) {
-            case 'start':
-              // Stream started
-              isStreaming.value = true
-              break
-
-            case 'invalidate':
-              // Server deleted old messages, clear local history and signal cache invalidation
-              messages.value = []
-              onInvalidate()
-              break
-
-            case 'role':
-              // Push placeholder for new message
-              if (frame.value) {
-                messages.value.push({
-                  role: frame.value.toString() as ChatMessage['role'],
-                  content: '',
-                  thinking: '',
-                })
-              }
-              break
-
-            case 'isThinking':
-              if (
-                frame.value !== undefined &&
-                frame.value !== null &&
-                typeof frame.value === 'boolean'
-              ) {
-                isThinking.value = frame.value
-              }
-              break
-
-            case 'thinking':
-              if (frame.value) {
-                messages.value[currIndex.value]!.thinking =
-                  messages.value[currIndex.value]!.thinking! + frame.value
-              }
-              break
-
-            case 'token':
-              // Accumulate tokens
-              if (frame.value) {
-                messages.value[currIndex.value]!.content += frame.value
-              }
-              break
-
-            case 'toolName':
-              if (frame.value) {
-                messages.value[currIndex.value]!.toolName = frame.value as string
-              }
-              break
-
-            case 'toolValue':
-              if (frame.value) {
-                messages.value[currIndex.value]!.content = frame.value as string
-              }
-              break
-
-            case 'end':
-              // Stream completed
-              isStreaming.value = false
-              break
-
-            case 'error':
-              // Error occurred - mark the current assistant message as failed
-              isStreaming.value = false
-              streamError.value = frame.message || 'Unknown error occurred'
-              if (currIndex.value >= 0 && messages.value[currIndex.value]) {
-                messages.value[currIndex.value]!.isError = true
-              }
-              break
-
-            default:
-              console.warn('Unknown frame type:', frame.type)
-          }
-        },
+        createFrameHandler({
+          messages,
+          currIndex,
+          isStreaming,
+          isThinking,
+          streamError,
+          onInvalidate,
+        }),
       )
     } catch (error) {
-      isStreaming.value = false
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
-      streamError.value = errorMessage
-      // Mark the last assistant message as failed if it exists
-      if (currIndex.value >= 0 && messages.value[currIndex.value]?.role === 'assistant') {
-        messages.value[currIndex.value]!.isError = true
-      }
-      console.error('Error in chat stream retry:', error)
+      handleStreamError(error, 'retry')
     }
   }
 

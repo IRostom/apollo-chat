@@ -8,7 +8,6 @@ import type {
   ChatMessage,
   ChatMessageServer,
   Conversation,
-  Model,
   RetryMessageOptions,
   SendMessageOptions,
   StreamFrame,
@@ -20,26 +19,19 @@ import type {
 export type StreamHandler = (frame: StreamFrame) => void
 
 /**
- * Send a message and stream the response
+ * Stream NDJSON from an endpoint and call onFrame for each parsed frame
  */
-export async function sendMessage(
-  options: SendMessageOptions,
+async function streamFromEndpoint(
+  url: string,
+  body: object,
   onFrame: StreamHandler,
 ): Promise<void> {
-  const { model, message, conversationId, webTools, think } = options
-
-  const response = await fetch(getApiUrl(API_CONFIG.endpoints.chat.stream), {
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      model,
-      message,
-      conversationId: conversationId || undefined,
-      webTools,
-      think,
-    }),
+    body: JSON.stringify(body),
   })
 
   if (!response.ok) {
@@ -85,10 +77,32 @@ export async function sendMessage(
     try {
       const frame = JSON.parse(buffer) as StreamFrame
       onFrame(frame)
-    } catch (e) {
+    } catch {
       // Ignore parse errors for incomplete frames
     }
   }
+}
+
+/**
+ * Send a message and stream the response
+ */
+export async function sendMessage(
+  options: SendMessageOptions,
+  onFrame: StreamHandler,
+): Promise<void> {
+  const { model, message, conversationId, webTools, think } = options
+
+  await streamFromEndpoint(
+    getApiUrl(API_CONFIG.endpoints.chat.stream),
+    {
+      model,
+      message,
+      conversationId: conversationId || undefined,
+      webTools,
+      think,
+    },
+    onFrame,
+  )
 }
 
 /**
@@ -100,67 +114,17 @@ export async function retryMessage(
 ): Promise<void> {
   const { messageId, conversationId, model, think, webTools } = options
 
-  const response = await fetch(getApiUrl(API_CONFIG.endpoints.chat.retry), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
+  await streamFromEndpoint(
+    getApiUrl(API_CONFIG.endpoints.chat.retry),
+    {
       messageId,
       conversationId,
       model,
       think,
       webTools,
-    }),
-  })
-
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
-  }
-
-  if (!response.body) {
-    throw new Error('Response body is null')
-  }
-
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-
-  while (true) {
-    const { done, value } = await reader.read()
-
-    if (done) {
-      break
-    }
-
-    // Decode the chunk and add to buffer
-    buffer += decoder.decode(value, { stream: true })
-
-    // Process complete lines (NDJSON format)
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || '' // Keep incomplete line in buffer
-
-    for (const line of lines) {
-      if (!line.trim()) continue
-
-      try {
-        const frame = JSON.parse(line) as StreamFrame
-        onFrame(frame)
-      } catch (parseError) {
-        console.error('Error parsing frame:', parseError, 'Line:', line)
-      }
-    }
-  }
-
-  // Process any remaining buffer
-  if (buffer.trim()) {
-    try {
-      const frame = JSON.parse(buffer) as StreamFrame
-      onFrame(frame)
-    } catch (e) {
-      // Ignore parse errors for incomplete frames
-    }
-  }
+    },
+    onFrame,
+  )
 }
 
 /**
