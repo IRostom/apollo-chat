@@ -37,27 +37,30 @@ export const webFetchTool = {
   },
 };
 
-// TODO: instead of throwing errors, return a string with the error message
+type WebToolError = { error: string };
+
 export const webTools = {
   webSearch: async (args: {
     query: string;
     max_results?: number;
-  }): Promise<WebSearchResponse> => {
+  }): Promise<WebSearchResponse | WebToolError> => {
     try {
       const res = await ollamaClient.webSearch(args);
       return res as WebSearchResponse;
     } catch (error) {
       console.error("Error calling webSearch:", error);
-      throw new Error("Error calling webSearch: " + error);
+      return { error: `Error calling webSearch: ${error}` };
     }
   },
-  webFetch: async (args: { url: string }): Promise<WebFetchResponse> => {
+  webFetch: async (args: {
+    url: string;
+  }): Promise<WebFetchResponse | WebToolError> => {
     try {
       const res = await ollamaClient.webFetch(args);
       return res as WebFetchResponse;
     } catch (error) {
       console.error("Error calling webFetch:", error);
-      throw new Error("Error calling webFetch: " + error);
+      return { error: `Error calling webFetch: ${error}` };
     }
   },
 };
