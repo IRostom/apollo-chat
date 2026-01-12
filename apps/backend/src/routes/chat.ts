@@ -6,6 +6,7 @@ import {
   getChatHistory,
   getMessageById,
   deleteMessagesAfterUserMessage,
+  loadChatHistory,
 } from "../services/chat";
 import { Message } from "ollama";
 import { frame } from "../utils/frame";
@@ -44,34 +45,6 @@ const retryValidation = [
     ),
   body("webTools").optional().isBoolean(),
 ];
-
-/**
- * Helper to load chat history from database and convert to Ollama Message format
- */
-async function loadChatHistory(conversationId: number): Promise<Message[]> {
-  const results = await getChatHistory(conversationId);
-  return Promise.all(
-    results.map(async (r) => {
-      let base64Images;
-      if (r.images && r.images.trim().split(",").length > 0) {
-        try {
-          const ids = r.images.trim().split(",");
-          base64Images = await convertImageIdsToBase64(ids);
-        } catch (error) {
-          console.error("Error processing images:", error);
-        }
-      }
-      return {
-        role: r.role,
-        content: r.content,
-        thinking: r.thinking ?? undefined,
-        tool_calls: r.tool_calls ? JSON.parse(r.tool_calls) : undefined,
-        tool_name: r.tool_name ?? undefined,
-        images: base64Images,
-      };
-    })
-  );
-}
 
 router.post(
   "/chat/stream",
@@ -150,7 +123,7 @@ router.post(
         images: clientMessage.images?.toString(),
       });
 
-      if(!conversationId && convId) {
+      if (!conversationId && convId) {
         res.write(frame("conversationId", { value: convId }));
       }
 

@@ -1,6 +1,8 @@
 import { db } from "../db/client";
 import { chatsTable, messagesTable } from "../db/schema";
 import { and, eq, gt } from "drizzle-orm";
+import { Message } from "ollama";
+import { convertImageIdsToBase64 } from "../utils/imageUtils";
 
 export async function createChat(chat: typeof chatsTable.$inferInsert) {
   const [conv] = await db
@@ -43,4 +45,34 @@ export async function deleteMessagesAfterUserMessage(
         gt(messagesTable.id, userMessageId)
       )
     );
+}
+
+/**
+ * Load chat history from database and convert to Ollama Message format
+ */
+export async function loadChatHistory(
+  conversationId: number
+): Promise<Message[]> {
+  const results = await getChatHistory(conversationId);
+  return Promise.all(
+    results.map(async (r) => {
+      let base64Images;
+      if (r.images && r.images.trim().split(",").length > 0) {
+        try {
+          const ids = r.images.trim().split(",");
+          base64Images = await convertImageIdsToBase64(ids);
+        } catch (error) {
+          console.error("Error processing images:", error);
+        }
+      }
+      return {
+        role: r.role,
+        content: r.content,
+        thinking: r.thinking ?? undefined,
+        tool_calls: r.tool_calls ? JSON.parse(r.tool_calls) : undefined,
+        tool_name: r.tool_name ?? undefined,
+        images: base64Images,
+      };
+    })
+  );
 }
