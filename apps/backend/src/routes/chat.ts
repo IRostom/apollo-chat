@@ -174,14 +174,14 @@ router.post(
     };
 
     // Validate assistant message exists and belongs to the conversation
-    const assistantMessage = await getMessageById(messageId);
+    const assistantMessage = await getMessageById(messageId, +conversationId);
     if (!assistantMessage) {
       return res.status(404).json({ error: "Message not found" });
     }
-    if (assistantMessage.conversation_id !== +conversationId) {
+    if (assistantMessage.role !== "assistant") {
       return res
         .status(400)
-        .json({ error: "Message does not belong to this conversation" });
+        .json({ error: "Message is not an assistant message" });
     }
 
     const ollamaPing = await PingOllama();

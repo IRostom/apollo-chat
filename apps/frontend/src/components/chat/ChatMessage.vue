@@ -83,7 +83,7 @@ const toolResult = computed(() => {
       v-if="hasError"
       class="mt-4 flex items-center gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive"
     >
-      <AlertCircle class="h-5 w-5 flex-shrink-0" />
+      <AlertCircle class="h-5 w-5 shrink-0" />
       <span class="flex-1 text-sm">An error occurred while generating a response.</span>
       <Button
         variant="outline"

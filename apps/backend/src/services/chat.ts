@@ -25,11 +25,11 @@ export async function addMessageToChat(
   return db.insert(messagesTable).values(message);
 }
 
-export async function getMessageById(id: number) {
+export async function getMessageById(id: number, conversationId: number) {
   const [message] = await db
     .select()
     .from(messagesTable)
-    .where(eq(messagesTable.id, id));
+    .where(and(eq(messagesTable.id, id), eq(messagesTable.conversation_id, conversationId)));
   return message;
 }
 
