@@ -8,9 +8,17 @@ interface Props {
   isThinking?: boolean
 }
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
   isStreaming: false,
 })
+
+const emit = defineEmits<{
+  retry: [assistantMessageId: number]
+}>()
+
+function isLastMessage(index: number) {
+  return index === props.messages.length - 1
+}
 </script>
 
 <template>
@@ -22,7 +30,12 @@ withDefaults(defineProps<Props>(), {
       :class="{ 'pt-12 pb-12': msg.role === 'user', 'pb-12': msg.role !== 'user' }"
     >
       <div class="mx-auto max-w-3xl">
-        <ChatMessage :message="msg" :is-loading="isStreaming" />
+        <ChatMessage
+          :message="msg"
+          :is-loading="isStreaming && isLastMessage(index)"
+          :is-thinking="isThinking && isLastMessage(index)"
+          @retry="msg.id && emit('retry', msg.id)"
+        />
       </div>
     </article>
   </div>

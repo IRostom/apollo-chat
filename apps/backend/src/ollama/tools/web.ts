@@ -37,16 +37,30 @@ export const webFetchTool = {
   },
 };
 
+type WebToolError = { error: string };
+
 export const webTools = {
   webSearch: async (args: {
     query: string;
     max_results?: number;
-  }): Promise<WebSearchResponse> => {
-    const res = await ollamaClient.webSearch(args);
-    return res as WebSearchResponse;
+  }): Promise<WebSearchResponse | WebToolError> => {
+    try {
+      const res = await ollamaClient.webSearch(args);
+      return res as WebSearchResponse;
+    } catch (error) {
+      console.error("Error calling webSearch:", error);
+      return { error: `Error calling webSearch: ${error}` };
+    }
   },
-  webFetch: async (args: { url: string }): Promise<WebFetchResponse> => {
-    const res = await ollamaClient.webFetch(args);
-    return res as WebFetchResponse;
+  webFetch: async (args: {
+    url: string;
+  }): Promise<WebFetchResponse | WebToolError> => {
+    try {
+      const res = await ollamaClient.webFetch(args);
+      return res as WebFetchResponse;
+    } catch (error) {
+      console.error("Error calling webFetch:", error);
+      return { error: `Error calling webFetch: ${error}` };
+    }
   },
 };

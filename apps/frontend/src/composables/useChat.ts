@@ -12,18 +12,22 @@ import { renderMarkdown } from './useMarkdown'
 import { useAppStore } from '@/stores/app'
 import type { ChatMessage } from '@/types/chat'
 import { useUploadFile } from '@/queries/upload'
+import { toast } from 'vue-sonner'
+import { useQueryClient } from '@tanstack/vue-query'
 
 /**
  * Chat state and operations
  * Combines streaming, history, routing, and file upload functionality
  */
 export function useChat() {
-  const { conversationId, skipRefetchForId, navigateToConversation } = useConversationRoute()
+  const { conversationId, navigateToConversation } = useConversationRoute()
   const appStore = useAppStore()
   const { files, uploadFile, reset: resetFiles } = useUploadFile()
+  const queryClient = useQueryClient()
 
   const {
     send: sendStreamMessage,
+    retry: retryStreamMessage,
     isStreaming,
     isThinking,
     newConversationId,
@@ -31,7 +35,20 @@ export function useChat() {
     resetMessages,
   } = useChatStream(conversationId)
 
-  const { data: chatHistoryServer } = useChatHistory(conversationId, skipRefetchForId)
+  const {
+    data: chatHistoryServer,
+    isError: isChatHistoryError,
+    error: chatHistoryError,
+  } = useChatHistory(conversationId)
+
+  watch(isChatHistoryError, (isChatHistoryError) => {
+    if (isChatHistoryError) {
+      console.log('chatHistoryError: ', chatHistoryError.value)
+      toast.error('Failed to fetch chat history', {
+        description: chatHistoryError.value?.message,
+      })
+    }
+  })
 
   // Transform server history with markdown rendering
   const chatHistoryServerWithMd = computed(() => {
@@ -57,6 +74,7 @@ export function useChat() {
   // Navigate when a new conversation is created
   watch(newConversationId, (id) => {
     if (id) {
+      queryClient.invalidateQueries({ queryKey: ['chats'] })
       navigateToConversation(id)
     }
   })
@@ -112,6 +130,11 @@ export function useChat() {
       serverMessage,
       think: appStore.canThink && appStore.shouldThink,
       webTools: appStore.canUseWebTools && appStore.useWebTools,
+      onStreamEnd: () => {
+        console.log('onStreamEnd', conversationId.value)
+        // Invalidate the chat history query to refetch from server
+        queryClient.invalidateQueries({ queryKey: ['chat', conversationId.value] })
+      },
     })
 
     resetFiles()
@@ -124,6 +147,37 @@ export function useChat() {
     uploadFile(file)
   }
 
+  /**
+   * Retry the last failed message
+   * Uses the server-side retry endpoint to delete old messages and regenerate
+   */
+  async function retryMessage(assistantMessageId: number) {
+    if (!appStore.userSelectedModel) {
+      throw new Error('No model selected. Please select a model before retrying.')
+    }
+
+    if (!conversationId.value) {
+      console.error('Cannot retry without a conversation ID')
+      return
+    }
+
+    // Call the retry endpoint with the assistant message ID
+    await retryStreamMessage({
+      messageId: assistantMessageId,
+      model: appStore.userSelectedModelName!,
+      think: appStore.canThink && appStore.shouldThink,
+      webTools: appStore.canUseWebTools && appStore.useWebTools,
+      onStreamEnd: () => {
+        // Invalidate the chat history query to refetch from server
+        queryClient.invalidateQueries({ queryKey: ['chat', conversationId.value] })
+      },
+      onInvalidate: () => {
+        // Invalidate the chat history query to refetch from server
+        queryClient.invalidateQueries({ queryKey: ['chat', conversationId.value] })
+      },
+    })
+  }
+
   return {
     chatMd: combinedChatMd,
     files,
@@ -131,5 +185,6 @@ export function useChat() {
     isThinking,
     sendMessage,
     attachImageToChat,
+    retryMessage,
   }
 }

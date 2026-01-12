@@ -19,22 +19,18 @@ import {
 import { useChats } from '@/queries/chats'
 
 import { RouterLink } from 'vue-router'
+import { toast } from 'vue-sonner'
+import { watch } from 'vue'
 
 const props = withDefaults(defineProps<SidebarProps>(), {
   collapsible: 'icon',
 })
 
-const { data: chats } = useChats()
+const { data: chats, isError, error } = useChats()
 
 const { open, setOpen } = useSidebar()
 
-// This is sample data.
 const data = {
-  user: {
-    name: 'shadcn',
-    email: 'm@example.com',
-    avatar: '/avatars/shadcn.jpg',
-  },
   navMain: [
     {
       title: 'New Chat',
@@ -43,6 +39,15 @@ const data = {
     },
   ],
 }
+
+watch(isError, (isError) => {
+  if (isError) {
+    toast.error(
+      'Failed to fetch chats: ' +
+        (error.value instanceof Error ? error.value.message : 'Unknown error'),
+    )
+  }
+})
 </script>
 
 <template>

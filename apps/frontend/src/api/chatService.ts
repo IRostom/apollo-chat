@@ -5,10 +5,9 @@
 
 import { getApiUrl, API_CONFIG } from '@/config/api'
 import type {
-  ChatMessage,
   ChatMessageServer,
   Conversation,
-  Model,
+  RetryMessageOptions,
   SendMessageOptions,
   StreamFrame,
 } from '@/types/chat'
@@ -19,26 +18,19 @@ import type {
 export type StreamHandler = (frame: StreamFrame) => void
 
 /**
- * Send a message and stream the response
+ * Stream NDJSON from an endpoint and call onFrame for each parsed frame
  */
-export async function sendMessage(
-  options: SendMessageOptions,
+async function streamFromEndpoint(
+  url: string,
+  body: object,
   onFrame: StreamHandler,
 ): Promise<void> {
-  const { model, message, conversationId, webTools, think } = options
-
-  const response = await fetch(getApiUrl(API_CONFIG.endpoints.chat.stream), {
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      model,
-      message,
-      conversationId: conversationId || undefined,
-      webTools,
-      think,
-    }),
+    body: JSON.stringify(body),
   })
 
   if (!response.ok) {
@@ -84,31 +76,68 @@ export async function sendMessage(
     try {
       const frame = JSON.parse(buffer) as StreamFrame
       onFrame(frame)
-    } catch (e) {
+    } catch {
       // Ignore parse errors for incomplete frames
     }
   }
 }
 
 /**
+ * Send a message and stream the response
+ */
+export async function sendMessage(
+  options: SendMessageOptions,
+  onFrame: StreamHandler,
+): Promise<void> {
+  const { model, message, conversationId, webTools, think } = options
+
+  await streamFromEndpoint(
+    getApiUrl(API_CONFIG.endpoints.chat.stream),
+    {
+      model,
+      message,
+      conversationId: conversationId || undefined,
+      webTools,
+      think,
+    },
+    onFrame,
+  )
+}
+
+/**
+ * Retry a message and stream the response
+ */
+export async function retryMessage(
+  options: RetryMessageOptions,
+  onFrame: StreamHandler,
+): Promise<void> {
+  const { messageId, conversationId, model, think, webTools } = options
+
+  await streamFromEndpoint(
+    getApiUrl(API_CONFIG.endpoints.chat.retry),
+    {
+      messageId,
+      conversationId,
+      model,
+      think,
+      webTools,
+    },
+    onFrame,
+  )
+}
+
+/**
  * Get a conversation by ID
  */
-export async function getConversation(id: string): Promise<ChatMessage[]> {
+export async function getConversation(id: string): Promise<ChatMessageServer[]> {
   const response = await fetch(getApiUrl(API_CONFIG.endpoints.conversations.get(id)))
 
   if (!response.ok) {
-    throw new Error(`network response failed: ${response.statusText}`)
+    const res = await response.json()
+    throw new Error(res.error || 'Failed to fetch chat history')
   }
 
-  const json: ChatMessageServer[] = await response.json()
-  const mapped = json.map((m) => {
-    return {
-      ...m,
-      toolName: m.tool_name,
-    }
-  })
-
-  return mapped
+  return response.json()
 }
 
 /**

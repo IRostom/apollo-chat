@@ -2,6 +2,7 @@ import { transcribe } from '@/queries/transcribe'
 import { useMutation } from '@tanstack/vue-query'
 import { useVoiceRecording } from './useVoiceRecording'
 import { watch } from 'vue'
+import { toast } from 'vue-sonner'
 
 export function useRecordAndTranscribe(onTranscriptionSuccess?: (result: string) => void) {
   const {
@@ -21,7 +22,9 @@ export function useRecordAndTranscribe(onTranscriptionSuccess?: (result: string)
       onTranscriptionSuccess?.(data.text)
     },
     onError: (error) => {
-      console.error('transcribe error: ', error)
+      toast.error('Transcribe failed', {
+        description: error.message,
+      })
     },
   })
 

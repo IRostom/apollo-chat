@@ -30,6 +30,7 @@ export const messagesTable = sqliteTable("messages_table", {
     .notNull()
     .default(sql`(current_timestamp)`)
     .$onUpdate(() => sql`(current_timestamp)`),
+  metadata: text(),
 });
 
 export const filesTable = sqliteTable("files_table", {

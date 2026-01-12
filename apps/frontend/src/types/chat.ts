@@ -10,6 +10,7 @@ export interface ChatMessageServer {
   tool_name?: string
   tool_calls?: string
   images?: string[]
+  metadata?: string
 }
 
 export interface ChatMessage {
@@ -19,6 +20,7 @@ export interface ChatMessage {
   thinking?: string
   toolName?: string
   images?: number[] | string[]
+  isError?: boolean
 }
 
 export interface Conversation {
@@ -57,6 +59,7 @@ export type StreamFrameType =
   | 'thinking'
   | 'isThinking'
   | 'role'
+  | 'invalidate'
 
 export interface StreamFrame {
   type: StreamFrameType
@@ -71,6 +74,14 @@ export interface SendMessageOptions {
   think?: boolean
   webTools?: boolean
   images?: ChatFile[]
+}
+
+export interface RetryMessageOptions {
+  messageId: number
+  conversationId: string
+  model: string
+  think?: boolean
+  webTools?: boolean
 }
 
 export interface ChatFile {

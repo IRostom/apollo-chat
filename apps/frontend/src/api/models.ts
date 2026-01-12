@@ -7,7 +7,14 @@ export async function getModels(): Promise<ModelsByFamily> {
   const response = await fetch(getApiUrl(API_CONFIG.endpoints.models.list))
 
   if (!response.ok) {
-    throw new Error(`network response failed: ${response.statusText}`)
+    let error = 'Failed to fetch models'
+    try {
+      const res = await response.json()
+      error = res.error || error
+    } catch {
+      // Response body is not JSON, use default error message
+    }
+    throw new Error(error)
   }
 
   return response.json()
