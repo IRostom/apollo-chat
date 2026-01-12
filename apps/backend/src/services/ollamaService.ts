@@ -31,9 +31,8 @@ export async function listOllamaModelsByFamily(): Promise<ModelsByFamily> {
       modelNames.map(async (name) => {
         const response = await ollamaClient.show({ model: name });
         const family = response.details.family;
-        let contextLength = 0;
 
-        contextLength =
+        const contextLength =
           (response.model_info as unknown as Record<string, number>)?.[
             `${family}.context_length`
           ] ?? undefined;
