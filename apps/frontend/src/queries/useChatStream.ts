@@ -42,8 +42,7 @@ function createFrameHandler(options: FrameHandlerOptions): (frame: StreamFrame) 
         break
 
       case 'invalidate':
-        // Server deleted old messages, clear local history and signal cache invalidation
-        // messages.value = []
+        // Server deleted old messages, signal cache invalidation
         onInvalidate?.()
         break
 

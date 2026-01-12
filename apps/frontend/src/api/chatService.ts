@@ -5,7 +5,6 @@
 
 import { getApiUrl, API_CONFIG } from '@/config/api'
 import type {
-  ChatMessage,
   ChatMessageServer,
   Conversation,
   RetryMessageOptions,
@@ -128,22 +127,9 @@ export async function retryMessage(
 }
 
 /**
- * Check if a message has a server error based on its metadata
- */
-function hasServerError(metadata?: string): boolean {
-  if (!metadata) return false
-  try {
-    const parsed = JSON.parse(metadata)
-    return parsed.done === false && parsed.done_reason === 'server_error'
-  } catch {
-    return false
-  }
-}
-
-/**
  * Get a conversation by ID
  */
-export async function getConversation(id: string): Promise<ChatMessage[]> {
+export async function getConversation(id: string): Promise<ChatMessageServer[]> {
   const response = await fetch(getApiUrl(API_CONFIG.endpoints.conversations.get(id)))
 
   if (!response.ok) {
@@ -151,17 +137,7 @@ export async function getConversation(id: string): Promise<ChatMessage[]> {
     throw new Error(res.error || 'Failed to fetch chat history')
   }
 
-  const json: ChatMessageServer[] = await response.json()
-  const mapped = json.map((m) => {
-    const isError = m.role === 'assistant' && hasServerError(m.metadata)
-    return {
-      ...m,
-      toolName: m.tool_name,
-      isError,
-    }
-  })
-
-  return mapped
+  return response.json()
 }
 
 /**
