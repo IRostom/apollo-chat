@@ -75,11 +75,21 @@ export async function loadChatHistory(
           console.error("Error processing images:", error);
         }
       }
+
+      let toolCalls;
+      if (r.tool_calls) {
+        try {
+          toolCalls = JSON.parse(r.tool_calls);
+        } catch (error) {
+          console.error("Error parsing tool_calls:", error);
+        }
+      }
+
       return {
         role: r.role,
         content: r.content,
         thinking: r.thinking ?? undefined,
-        tool_calls: r.tool_calls ? JSON.parse(r.tool_calls) : undefined,
+        tool_calls: toolCalls,
         tool_name: r.tool_name ?? undefined,
         images: base64Images,
       };
