@@ -67,7 +67,7 @@ onMounted(() => {
       </ScrollArea>
     </SidebarInset>
   </SidebarProvider>
-  <Toaster position="top-center" :duration="5000" />
+  <Toaster position="top-center" :duration="2000" />
 </template>
 
 <style scoped></style>

@@ -4,7 +4,7 @@ import ChatMessages from './chat/ChatMessages.vue'
 import ChatInput from './chat/ChatInput.vue'
 import type { ChatMessage } from '@/types/chat'
 
-const { chatMd, isStreaming, isThinking, sendMessage, files, attachImageToChat, retryLastMessage } =
+const { chatMd, isStreaming, isThinking, sendMessage, files, attachImageToChat, retryMessage } =
   useChat()
 
 async function handleSend(message: string) {
@@ -16,8 +16,8 @@ async function handleSend(message: string) {
   await sendMessage(userMessage)
 }
 
-async function handleRetry() {
-  await retryLastMessage()
+async function handleRetry(assistantMessageId: number) {
+  await retryMessage(assistantMessageId)
 }
 </script>
 

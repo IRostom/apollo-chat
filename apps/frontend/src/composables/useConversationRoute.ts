@@ -3,7 +3,7 @@
  * Handles conversation ID from route and navigation logic
  */
 
-import { computed, ref, watch } from 'vue'
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 /**
@@ -17,29 +17,15 @@ export function useConversationRoute() {
     return route.params.id ? (route.params.id as string) : undefined
   })
 
-  // Track the conversationId we're programmatically navigating to (to skip refetch)
-  const skipRefetchForId = ref<string | undefined>(undefined)
-
-  // Watch conversationId to clear skipRefetch flag when navigating to a different conversation
-  watch(conversationId, (newId) => {
-    // Clear the skip flag when conversationId changes to a different value
-    // This allows normal refetching for user-initiated navigation to other conversations
-    if (skipRefetchForId.value && newId !== skipRefetchForId.value) {
-      skipRefetchForId.value = undefined
-    }
-  })
-
   /**
    * Navigate to a conversation
    */
   function navigateToConversation(id: string) {
-    skipRefetchForId.value = id
     router.replace(`/${id}`)
   }
 
   return {
     conversationId,
-    skipRefetchForId,
     navigateToConversation,
   }
 }

@@ -13,7 +13,7 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
-  retry: []
+  retry: [assistantMessageId: number]
 }>()
 
 function isLastMessage(index: number) {
@@ -34,7 +34,7 @@ function isLastMessage(index: number) {
           :message="msg"
           :is-loading="isStreaming && isLastMessage(index)"
           :is-thinking="isThinking && isLastMessage(index)"
-          @retry="emit('retry')"
+          @retry="msg.id && emit('retry', msg.id)"
         />
       </div>
     </article>

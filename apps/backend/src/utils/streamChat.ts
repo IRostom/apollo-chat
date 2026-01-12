@@ -101,7 +101,7 @@ export async function streamChatResponse(
             tool_calls: part.message.tool_calls,
           });
 
-          addMessageToChat({
+          await addMessageToChat({
             ...assistantMessage,
             conversation_id: conversationId,
             tool_calls: JSON.stringify(part.message.tool_calls),
@@ -142,7 +142,7 @@ export async function streamChatResponse(
                 tool_name: toolCall.function.name,
               });
 
-              addMessageToChat({
+              await addMessageToChat({
                 ...toolMessage,
                 conversation_id: conversationId,
                 tool_name: toolCall.function.name.toString(),
@@ -171,9 +171,6 @@ export async function streamChatResponse(
       // If no tool calls, we're done streaming
       if (!hadToolCalls) {
         console.log("Streaming about to end...");
-        res.write(frame("end"));
-        res.end();
-
         // Persist assistant reply
         await addMessageToChat({
           conversation_id: conversationId,
@@ -183,6 +180,8 @@ export async function streamChatResponse(
           metadata: JSON.stringify(metadata),
         });
 
+        res.write(frame("end"));
+        res.end();
         break;
       }
       // Otherwise, loop continues with tool results added to history

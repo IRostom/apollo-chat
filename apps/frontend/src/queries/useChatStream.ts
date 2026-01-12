@@ -15,9 +15,9 @@ interface FrameHandlerOptions {
   currIndex: ComputedRef<number>
   isStreaming: Ref<boolean>
   isThinking: Ref<boolean>
-  streamError: Ref<string | null>
   newConversationId?: Ref<string>
   onInvalidate?: () => void
+  onStreamEnd: () => void
 }
 
 /**
@@ -30,9 +30,9 @@ function createFrameHandler(options: FrameHandlerOptions): (frame: StreamFrame) 
     currIndex,
     isStreaming,
     isThinking,
-    streamError,
     newConversationId,
     onInvalidate,
+    onStreamEnd,
   } = options
 
   return (frame: StreamFrame) => {
@@ -43,7 +43,7 @@ function createFrameHandler(options: FrameHandlerOptions): (frame: StreamFrame) 
 
       case 'invalidate':
         // Server deleted old messages, clear local history and signal cache invalidation
-        messages.value = []
+        // messages.value = []
         onInvalidate?.()
         break
 
@@ -59,11 +59,7 @@ function createFrameHandler(options: FrameHandlerOptions): (frame: StreamFrame) 
         break
 
       case 'isThinking':
-        if (
-          frame.value !== undefined &&
-          frame.value !== null &&
-          typeof frame.value === 'boolean'
-        ) {
+        if (frame.value !== undefined && frame.value !== null && typeof frame.value === 'boolean') {
           isThinking.value = frame.value
         }
         break
@@ -103,15 +99,16 @@ function createFrameHandler(options: FrameHandlerOptions): (frame: StreamFrame) 
 
       case 'end':
         isStreaming.value = false
+        onStreamEnd?.()
         break
 
       case 'error':
         // Error occurred - mark the current assistant message as failed
         isStreaming.value = false
-        streamError.value = frame.message || 'Unknown error occurred'
         if (currIndex.value >= 0 && messages.value[currIndex.value]) {
           messages.value[currIndex.value]!.isError = true
         }
+        onStreamEnd?.()
         break
 
       default:
@@ -129,7 +126,6 @@ export function useChatStream(conversationId: Ref<string | undefined>) {
   const isThinking: Ref<boolean> = ref(false)
   const newConversationId: Ref<string> = ref('')
   const messages: Ref<ChatMessage[]> = ref([])
-  const streamError: Ref<string | null> = ref(null)
   const currIndex = computed(() => messages.value.length - 1)
 
   /**
@@ -137,8 +133,6 @@ export function useChatStream(conversationId: Ref<string | undefined>) {
    */
   const handleStreamError = (error: unknown, context: string) => {
     isStreaming.value = false
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
-    streamError.value = errorMessage
     // Mark the last assistant message as failed if it exists
     if (currIndex.value >= 0 && messages.value[currIndex.value]?.role === 'assistant') {
       messages.value[currIndex.value]!.isError = true
@@ -158,16 +152,12 @@ export function useChatStream(conversationId: Ref<string | undefined>) {
     serverMessage: ChatMessage
     think?: boolean
     webTools?: boolean
-    /** If true, skips adding the user message (used for retry) */
-    isRetry?: boolean
+    onStreamEnd: () => void
   }) => {
-    const { model, displayMessage, serverMessage, think, webTools, isRetry } = options
+    const { model, displayMessage, serverMessage, think, webTools, onStreamEnd } = options
 
     isStreaming.value = true
-    // Push user message for display (skip if retrying)
-    if (!isRetry) {
-      messages.value.push(displayMessage)
-    }
+    messages.value.push(displayMessage)
 
     try {
       await sendMessage(
@@ -183,8 +173,8 @@ export function useChatStream(conversationId: Ref<string | undefined>) {
           currIndex,
           isStreaming,
           isThinking,
-          streamError,
           newConversationId,
+          onStreamEnd,
         }),
       )
     } catch (error) {
@@ -196,10 +186,6 @@ export function useChatStream(conversationId: Ref<string | undefined>) {
     messages.value = []
   }
 
-  const clearError = () => {
-    streamError.value = null
-  }
-
   /**
    * Retry a message and handle the streaming response
    * Calls onInvalidate when the server signals cache invalidation is needed
@@ -207,16 +193,16 @@ export function useChatStream(conversationId: Ref<string | undefined>) {
   const retry = async (
     options: Omit<RetryMessageOptions, 'conversationId'> & {
       onInvalidate: () => void
+      onStreamEnd: () => void
     },
   ) => {
-    const { messageId, model, think, webTools, onInvalidate } = options
+    const { messageId, model, think, webTools, onInvalidate, onStreamEnd } = options
 
     if (!conversationId.value) {
       throw new Error('Cannot retry without a conversation ID')
     }
 
     isStreaming.value = true
-    streamError.value = null
 
     try {
       await retryMessage(
@@ -232,8 +218,8 @@ export function useChatStream(conversationId: Ref<string | undefined>) {
           currIndex,
           isStreaming,
           isThinking,
-          streamError,
           onInvalidate,
+          onStreamEnd,
         }),
       )
     } catch (error) {
@@ -245,11 +231,9 @@ export function useChatStream(conversationId: Ref<string | undefined>) {
     isStreaming,
     isThinking,
     newConversationId,
-    streamError,
     send,
     retry,
     messages,
     resetMessages,
-    clearError,
   }
 }

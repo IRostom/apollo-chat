@@ -11,10 +11,7 @@ import { getConversation } from '@/api/chatService'
  * Fetches chat history from the server
  * Responsibility: Server history fetching via Vue Query
  */
-export function useChatHistory(
-  chatId: Ref<string | undefined> | ComputedRef<string | undefined>,
-  skipRefetchForId?: Ref<string | undefined>,
-) {
+export function useChatHistory(chatId: Ref<string | undefined> | ComputedRef<string | undefined>) {
   return useQuery({
     queryKey: ['chat', chatId],
     queryFn: async () => {
@@ -24,10 +21,6 @@ export function useChatHistory(
       return getConversation(chatId.value)
     },
     enabled: () => {
-      // Skip refetch if this is the conversationId we're programmatically navigating to
-      if (skipRefetchForId?.value && chatId.value === skipRefetchForId.value) {
-        return false
-      }
       return !!chatId.value
     },
   })

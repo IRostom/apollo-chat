@@ -53,9 +53,9 @@ async function loadChatHistory(conversationId: number): Promise<Message[]> {
   return Promise.all(
     results.map(async (r) => {
       let base64Images;
-      if (r.images && r.images.split(",").length > 0) {
+      if (r.images && r.images.trim().split(",").length > 0) {
         try {
-          const ids = r.images.split(",");
+          const ids = r.images.trim().split(",");
           base64Images = await convertImageIdsToBase64(ids);
         } catch (error) {
           console.error("Error processing images:", error);
@@ -119,7 +119,7 @@ router.post(
         });
         convId = chatRes.toString();
         console.log("new chat created", convId, clientMessage.content);
-        res.write(frame("conversationId", { value: convId }));
+        // res.write(frame("conversationId", { value: convId }));
       }
 
       // ---- Load history ----
@@ -144,11 +144,15 @@ router.post(
 
       chatHistory.push({ ...userMessage, images: clientImagesBase64 });
 
-      addMessageToChat({
+      await addMessageToChat({
         ...userMessage,
         conversation_id: +convId,
         images: clientMessage.images?.toString(),
       });
+
+      if(!conversationId && convId) {
+        res.write(frame("conversationId", { value: convId }));
+      }
 
       // ---- Stream the response ----
       await streamChatResponse({

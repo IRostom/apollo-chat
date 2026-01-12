@@ -19,7 +19,7 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
-  retry: []
+  retry: [assistantMessageId: number]
 }>()
 
 const isUser = computed(() => props.message.role === 'user')
@@ -85,7 +85,12 @@ const toolResult = computed(() => {
     >
       <AlertCircle class="h-5 w-5 flex-shrink-0" />
       <span class="flex-1 text-sm">An error occurred while generating a response.</span>
-      <Button variant="outline" size="sm" class="gap-2" @click="emit('retry')">
+      <Button
+        variant="outline"
+        size="sm"
+        class="gap-2"
+        @click="message.id && emit('retry', message.id)"
+      >
         <RotateCcw class="h-4 w-4" />
         Retry
       </Button>

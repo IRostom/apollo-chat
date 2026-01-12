@@ -70,11 +70,11 @@ export async function listOllamaModelsByFamily(): Promise<ModelsByFamily> {
   }
 }
 
-export async function PingOllama(): Promise<any> {
+export async function PingOllama(): Promise<boolean> {
   try {
     await ollamaClient.version();
     return true;
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error pinging OLLAMA:", error);
     return false;
   }

@@ -16,7 +16,7 @@ router.get("/conversations", async (req: Request, res: Response) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({
-      error: err instanceof Error ? err.message : "Internal server error" + err,
+      error: err instanceof Error ? err.message : "Internal server error",
     });
   }
 });
@@ -50,7 +50,7 @@ router.get("/conversations/:id", async (req: Request, res: Response) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({
-      error: err instanceof Error ? err.message : "Internal server error" + err,
+      error: err instanceof Error ? err.message : "Internal server error",
     });
   }
 });
@@ -66,7 +66,7 @@ router.delete("/conversations/:id", async (req: Request, res: Response) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({
-      error: err instanceof Error ? err.message : "Internal server error" + err,
+      error: err instanceof Error ? err.message : "Internal server error",
     });
   }
 });
