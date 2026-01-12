@@ -29,7 +29,12 @@ export async function getMessageById(id: number, conversationId: number) {
   const [message] = await db
     .select()
     .from(messagesTable)
-    .where(and(eq(messagesTable.id, id), eq(messagesTable.conversation_id, conversationId)));
+    .where(
+      and(
+        eq(messagesTable.id, id),
+        eq(messagesTable.conversation_id, conversationId)
+      )
+    );
   return message;
 }
 
@@ -57,10 +62,15 @@ export async function loadChatHistory(
   return Promise.all(
     results.map(async (r) => {
       let base64Images;
-      if (r.images && r.images.trim().split(",").length > 0) {
+      if (r.images && r.images.trim()) {
         try {
-          const ids = r.images.trim().split(",");
-          base64Images = await convertImageIdsToBase64(ids);
+          const ids = r.images
+            .trim()
+            .split(",")
+            .filter((id) => id.trim());
+          if (ids.length > 0) {
+            base64Images = await convertImageIdsToBase64(ids);
+          }
         } catch (error) {
           console.error("Error processing images:", error);
         }
