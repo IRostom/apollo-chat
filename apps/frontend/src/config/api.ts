@@ -11,6 +11,8 @@ export const API_CONFIG = {
     chat: {
       stream: '/chat/stream',
       retry: '/chat/stream/retry',
+      edit: '/chat/stream/edit',
+      branch: '/chat/branch',
     },
     conversations: {
       list: '/conversations',

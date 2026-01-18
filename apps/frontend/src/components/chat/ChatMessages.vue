@@ -14,6 +14,9 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   retry: [assistantMessageId: number]
+  edit: [message: ChatMessageType]
+  branch: [assistantMessageId: number]
+  copy: [content: string]
 }>()
 
 function isLastMessage(index: number) {
@@ -34,7 +37,10 @@ function isLastMessage(index: number) {
           :message="msg"
           :is-loading="isStreaming && isLastMessage(index)"
           :is-thinking="isThinking && isLastMessage(index)"
-          @retry="msg.id && emit('retry', msg.id)"
+          @retry="emit('retry', $event)"
+          @edit="emit('edit', $event)"
+          @branch="emit('branch', $event)"
+          @copy="emit('copy', $event)"
         />
       </div>
     </article>

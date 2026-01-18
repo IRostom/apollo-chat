@@ -39,6 +39,7 @@ import { toast } from 'vue-sonner'
 interface Props {
   isStreaming?: boolean
   files?: ChatFile[]
+  editingContent?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -49,7 +50,10 @@ const emit = defineEmits<{
   send: [message: string]
   stop: []
   attach: [file: File]
+  cancelEdit: []
 }>()
+
+const isEditing = computed(() => props.editingContent !== undefined)
 
 const appStore = useAppStore()
 // TODO:
@@ -69,6 +73,19 @@ watch(isModelsError, (isModelsError) => {
     })
   }
 })
+
+// Populate input when editing content changes, clear when editing is canceled
+watch(
+  () => props.editingContent,
+  (content, oldContent) => {
+    if (content !== undefined) {
+      userMsg.value = content
+    } else if (oldContent !== undefined) {
+      // Editing was canceled, clear the input
+      userMsg.value = ''
+    }
+  },
+)
 
 const userMsg = ref('')
 const userSelectedModelName = computed(() => appStore.userSelectedModelName)
@@ -155,6 +172,19 @@ onUnmounted(() => {
 
 <template>
   <div class="sticky bottom-0 max-w-3xl w-full mx-auto pb-4 bg-background">
+    <!-- Editing indicator -->
+    <div
+      v-if="isEditing"
+      class="flex items-center justify-between px-3 py-2 mb-2 rounded-lg bg-muted border"
+    >
+      <span class="text-sm text-muted-foreground">Editing message</span>
+      <button
+        @click="emit('cancelEdit')"
+        class="text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        Cancel
+      </button>
+    </div>
     <InputGroup>
       <InputGroupAddon align="block-start">
         <div class="flex items-center justify-start gap-3">

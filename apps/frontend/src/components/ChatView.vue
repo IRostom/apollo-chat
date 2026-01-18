@@ -4,6 +4,7 @@ import { useChat } from '@/composables/useChat'
 import ChatMessages from './chat/ChatMessages.vue'
 import ChatInput from './chat/ChatInput.vue'
 import type { ChatMessage } from '@/types/chat'
+import { toast } from 'vue-sonner'
 
 const {
   chatMd,
@@ -14,11 +15,22 @@ const {
   files,
   attachImageToChat,
   retryMessage,
+  editMessage,
+  editingMessage,
+  cancelEdit,
+  submitEditedMessage,
+  branchConversation,
 } = useChat()
 
 const isEmpty = computed(() => chatMd.value.length === 0)
 
 async function handleSend(message: string) {
+  // If we're editing, submit the edit instead of sending a new message
+  if (editingMessage.value) {
+    await submitEditedMessage(message)
+    return
+  }
+
   const userMessage: ChatMessage = {
     role: 'user',
     content: message,
@@ -33,6 +45,23 @@ async function handleRetry(assistantMessageId: number) {
 
 function handleStop() {
   stopGeneration()
+}
+
+async function handleCopy(content: string) {
+  try {
+    await navigator.clipboard.writeText(content)
+    toast.success('Copied to clipboard')
+  } catch {
+    toast.error('Failed to copy to clipboard')
+  }
+}
+
+async function handleEdit(message: ChatMessage) {
+  editMessage(message)
+}
+
+async function handleBranch(assistantMessageId: number) {
+  await branchConversation(assistantMessageId)
 }
 </script>
 
@@ -66,6 +95,13 @@ function handleStop() {
       @send="handleSend"
       @stop="handleStop"
       @attach="attachImageToChat"
+      :is-thinking="isThinking"
+      @retry="handleRetry"
+      @edit="handleEdit"
+      @branch="handleBranch"
+      @copy="handleCopy"
+      @cancel-edit="cancelEdit"
+      :editing-content="editingMessage?.content"
     />
   </div>
 </template>

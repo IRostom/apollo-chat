@@ -4,8 +4,8 @@
  */
 
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
-import { retryMessage, sendMessage } from '@/api/chatService'
-import type { ChatMessage, RetryMessageOptions, StreamFrame } from '@/types/chat'
+import { editMessage, retryMessage, sendMessage } from '@/api/chatService'
+import type { ChatMessage, EditMessageOptions, RetryMessageOptions, StreamFrame } from '@/types/chat'
 
 /**
  * Options for creating a frame handler
@@ -268,6 +268,48 @@ export function useChatStream(conversationId: Ref<string | undefined>) {
     }
   }
 
+  /**
+   * Edit a user message and handle the streaming response
+   * Updates the user message content, deletes subsequent messages, and regenerates
+   */
+  const edit = async (
+    options: Omit<EditMessageOptions, 'conversationId'> & {
+      onInvalidate: () => void
+      onStreamEnd: () => void
+    },
+  ) => {
+    const { messageId, content, model, think, webTools, onInvalidate, onStreamEnd } = options
+
+    if (!conversationId.value) {
+      throw new Error('Cannot edit without a conversation ID')
+    }
+
+    isStreaming.value = true
+
+    try {
+      await editMessage(
+        {
+          messageId,
+          conversationId: conversationId.value,
+          content,
+          model,
+          think,
+          webTools,
+        },
+        createFrameHandler({
+          messages,
+          currIndex,
+          isStreaming,
+          isThinking,
+          onInvalidate,
+          onStreamEnd,
+        }),
+      )
+    } catch (error) {
+      handleStreamError(error, 'edit')
+    }
+  }
+
   return {
     isStreaming,
     isThinking,
@@ -275,6 +317,7 @@ export function useChatStream(conversationId: Ref<string | undefined>) {
     send,
     retry,
     stop,
+    edit,
     messages,
     resetMessages,
   }

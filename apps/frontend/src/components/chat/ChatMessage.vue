@@ -7,6 +7,7 @@ import { ChevronDown, ChevronUp, Globe, AlertCircle, RotateCcw } from 'lucide-vu
 import { getImageUrl } from '@/config/api'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import MessageTools from './MessageTools.vue'
 
 interface Props {
   message: ChatMessage
@@ -20,6 +21,9 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   retry: [assistantMessageId: number]
+  edit: [message: ChatMessage]
+  branch: [assistantMessageId: number]
+  copy: [content: string]
 }>()
 
 const isUser = computed(() => props.message.role === 'user')
@@ -37,6 +41,19 @@ const toolResult = computed(() => {
   }
   return props.message.content
 })
+
+function handleRetry() {
+  if (props.message.id) {
+    console.log('retry', props.message.id)
+    emit('retry', props.message.id)
+  }
+}
+
+function handleBranch() {
+  if (props.message.id) {
+    emit('branch', props.message.id)
+  }
+}
 </script>
 
 <template>
@@ -44,7 +61,7 @@ const toolResult = computed(() => {
     v-if="isLoading && isAssistant && !message.content.length && !message.thinking?.length"
   />
 
-  <div v-else-if="isUser" class="flex flex-col gap-2">
+  <div v-else-if="isUser" class="flex flex-col gap-2 group">
     <div class="flex items-center justify-end gap-2">
       <div v-for="image in message.images" :key="image" class="border rounded-xl p-1">
         <img :src="getImageUrl(image as string)" class="w-14.5 h-14.5" />
@@ -57,11 +74,17 @@ const toolResult = computed(() => {
         </div>
       </CardContent>
     </Card>
+    <MessageTools
+      role="user"
+      class="ms-auto opacity-0 group-hover:opacity-100 transition-opacity"
+      @copy="emit('copy', message.content)"
+      @edit="emit('edit', message)"
+    />
   </div>
 
   <div
     v-else-if="isAssistant"
-    class="mx-auto dark:prose-invert prose lg:prose-lg prose-pre:p-0 flex flex-col"
+    class="mx-auto dark:prose-invert prose lg:prose-lg prose-pre:p-0 flex flex-col group"
   >
     <Collapsible v-if="message.thinking?.length" class="border rounded-lg" v-slot="{ open }">
       <CollapsibleTrigger class="py-2 px-3 cursor-pointer w-full text-start flex items-center">
@@ -85,16 +108,20 @@ const toolResult = computed(() => {
     >
       <AlertCircle class="h-5 w-5 shrink-0" />
       <span class="flex-1 text-sm">An error occurred while generating a response.</span>
-      <Button
-        variant="outline"
-        size="sm"
-        class="gap-2"
-        @click="message.id && emit('retry', message.id)"
-      >
+      <Button variant="outline" size="sm" class="gap-2" @click="handleRetry">
         <RotateCcw class="h-4 w-4" />
         Retry
       </Button>
     </div>
+
+    <MessageTools
+      v-if="!hasError"
+      role="assistant"
+      class="mt-2 opacity-0 group-hover:opacity-100 transition-opacity"
+      @copy="emit('copy', message.content)"
+      @retry="handleRetry"
+      @branch="handleBranch"
+    />
   </div>
 
   <div v-else-if="isTool" class="mx-auto dark:prose-invert prose lg:prose-lg flex flex-col">
