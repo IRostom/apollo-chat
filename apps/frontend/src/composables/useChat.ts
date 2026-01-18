@@ -28,6 +28,7 @@ export function useChat() {
   const {
     send: sendStreamMessage,
     retry: retryStreamMessage,
+    stop: stopGeneration,
     isStreaming,
     isThinking,
     newConversationId,
@@ -184,6 +185,7 @@ export function useChat() {
     isStreaming,
     isThinking,
     sendMessage,
+    stopGeneration,
     attachImageToChat,
     retryMessage,
   }

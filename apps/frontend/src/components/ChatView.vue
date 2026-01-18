@@ -5,8 +5,16 @@ import ChatMessages from './chat/ChatMessages.vue'
 import ChatInput from './chat/ChatInput.vue'
 import type { ChatMessage } from '@/types/chat'
 
-const { chatMd, isStreaming, isThinking, sendMessage, files, attachImageToChat, retryMessage } =
-  useChat()
+const {
+  chatMd,
+  isStreaming,
+  isThinking,
+  sendMessage,
+  stopGeneration,
+  files,
+  attachImageToChat,
+  retryMessage,
+} = useChat()
 
 const isEmpty = computed(() => chatMd.value.length === 0)
 
@@ -21,6 +29,10 @@ async function handleSend(message: string) {
 
 async function handleRetry(assistantMessageId: number) {
   await retryMessage(assistantMessageId)
+}
+
+function handleStop() {
+  stopGeneration()
 }
 </script>
 
@@ -48,10 +60,10 @@ async function handleRetry(assistantMessageId: number) {
       />
     </div>
     <ChatInput
-      v-if="!isEmpty"
       :files
-      :disabled="isStreaming"
+      :is-streaming="isStreaming"
       @send="handleSend"
+      @stop="handleStop"
       @attach="attachImageToChat"
     />
   </div>
