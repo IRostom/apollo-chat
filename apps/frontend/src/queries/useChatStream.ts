@@ -117,8 +117,18 @@ function createFrameHandler(options: FrameHandlerOptions): (frame: StreamFrame) 
 }
 
 /**
- * Manages chat streaming state and message accumulation
- * Responsibility: Stream handling, message accumulation, frame parsing
+ * Provide reactive state and actions for streaming chat messages tied to a conversation ID.
+ *
+ * @param conversationId - A Ref containing the current conversation ID or `undefined` when none is selected
+ * @returns An object exposing reactive state and control methods:
+ * - `isStreaming`: Ref<boolean> — true while a streaming response is in progress
+ * - `isThinking`: Ref<boolean> — true while the assistant is in a "thinking" state
+ * - `newConversationId`: Ref<string> — conversation ID reported by the stream, if updated
+ * - `send`: (options) => Promise<void> — start sending a message and handle the streaming response
+ * - `retry`: (options) => Promise<void> — retry a previously sent message and handle the streaming response
+ * - `stop`: () => void — abort the active stream and reset streaming/thinking flags
+ * - `messages`: Ref<ChatMessage[]> — accumulated chat messages (local display state)
+ * - `resetMessages`: () => void — clear the local message list
  */
 export function useChatStream(conversationId: Ref<string | undefined>) {
   const isStreaming: Ref<boolean> = ref(false)

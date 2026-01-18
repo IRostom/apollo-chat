@@ -18,9 +18,10 @@ import type {
 export type StreamHandler = (frame: StreamFrame) => void
 
 /**
- * Stream NDJSON from an endpoint and call onFrame for each parsed frame
- * @param signal - Optional AbortSignal to cancel the stream
- * @returns true if completed normally, false if aborted
+ * Stream NDJSON frames from an endpoint and invoke `onFrame` for each parsed frame.
+ *
+ * @param signal - Optional AbortSignal to cancel the stream.
+ * @returns `true` if streaming completed normally, `false` if aborted by the provided signal.
  */
 async function streamFromEndpoint(
   url: string,
@@ -97,9 +98,12 @@ async function streamFromEndpoint(
 }
 
 /**
- * Send a message and stream the response
+ * Send a chat message and stream NDJSON frames from the server to the provided handler.
+ *
+ * @param options - Message send options (model, message, conversationId, webTools, think)
+ * @param onFrame - Callback invoked for each streamed frame
  * @param signal - Optional AbortSignal to cancel the stream
- * @returns true if completed normally, false if aborted
+ * @returns `true` if the stream completed normally, `false` if it was aborted
  */
 export async function sendMessage(
   options: SendMessageOptions,
@@ -123,9 +127,12 @@ export async function sendMessage(
 }
 
 /**
- * Retry a message and stream the response
+ * Retry sending a message to the chat endpoint and stream resulting NDJSON frames to the provided handler.
+ *
+ * @param options - Parameters including `messageId`, `conversationId`, `model`, `think`, and `webTools`
+ * @param onFrame - Callback invoked for each parsed stream frame
  * @param signal - Optional AbortSignal to cancel the stream
- * @returns true if completed normally, false if aborted
+ * @returns `true` if the stream completed normally, `false` if aborted
  */
 export async function retryMessage(
   options: RetryMessageOptions,

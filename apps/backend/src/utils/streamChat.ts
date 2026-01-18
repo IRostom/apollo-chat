@@ -24,11 +24,9 @@ export interface StreamChatOptions {
 }
 
 /**
- * Stream a chat response from Ollama to the client
- * Handles the streaming loop, tool execution, and error recovery
- * Automatically handles client disconnection by aborting the Ollama stream
+ * Stream assistant responses from Ollama to the HTTP response, execute any model-initiated tool calls, and persist assistant and tool messages to chat storage.
  *
- * @throws Error if streaming fails (caller should handle)
+ * The function writes framing events (tokens, thinking state, tool results, end/error) to the provided Express response, executes matched web tools when the model issues tool_calls, and appends resulting messages to the conversation history. It automatically aborts the Ollama stream and saves a partial assistant message with metadata when the client disconnects, and saves a partial message with done_reason "server_error" if an internal error occurs. The response close handler is registered on start and removed on completion.
  */
 export async function streamChatResponse(
   options: StreamChatOptions

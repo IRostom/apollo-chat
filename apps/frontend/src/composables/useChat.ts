@@ -16,8 +16,19 @@ import { toast } from 'vue-sonner'
 import { useQueryClient } from '@tanstack/vue-query'
 
 /**
- * Chat state and operations
- * Combines streaming, history, routing, and file upload functionality
+ * Orchestrates chat state and actions combining streaming, server/local history, routing, markdown rendering, and file uploads.
+ *
+ * Exposes reactive chat data and operations for sending, retrying, stopping generation, attaching images, and accessing upload/state flags.
+ *
+ * @returns An object containing:
+ * - `chatMd`: computed combined chat history (server + local) with assistant content rendered to markdown
+ * - `files`: reactive list of attached/uploaded files
+ * - `isStreaming`: reactive flag indicating an active streaming generation
+ * - `isThinking`: reactive flag indicating the assistant is in a thinking/post-processing state
+ * - `sendMessage`: function to send a message (includes attached files when present)
+ * - `stopGeneration`: function to stop an active streaming generation
+ * - `attachImageToChat`: function to attach an image `File` to the current chat (uploads the file)
+ * - `retryMessage`: function to retry generation for a given assistant message ID
  */
 export function useChat() {
   const { conversationId, navigateToConversation } = useConversationRoute()
