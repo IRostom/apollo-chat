@@ -127,6 +127,9 @@ export function useChatStream(conversationId: Ref<string | undefined>) {
   const messages: Ref<ChatMessage[]> = ref([])
   const currIndex = computed(() => messages.value.length - 1)
 
+  // AbortController for cancelling the current stream
+  let abortController: AbortController | null = null
+
   /**
    * Handle stream errors consistently
    */
@@ -137,6 +140,19 @@ export function useChatStream(conversationId: Ref<string | undefined>) {
       messages.value[currIndex.value]!.isError = true
     }
     console.error(`Error in chat stream ${context}:`, error)
+  }
+
+  /**
+   * Stop the current generation
+   * Aborts the ongoing stream and marks it as stopped (not error)
+   */
+  const stop = () => {
+    if (abortController) {
+      abortController.abort()
+      abortController = null
+    }
+    isStreaming.value = false
+    isThinking.value = false
   }
 
   /**
@@ -155,11 +171,14 @@ export function useChatStream(conversationId: Ref<string | undefined>) {
   }) => {
     const { model, displayMessage, serverMessage, think, webTools, onStreamEnd } = options
 
+    // Create new AbortController for this stream
+    abortController = new AbortController()
+
     isStreaming.value = true
     messages.value.push(displayMessage)
 
     try {
-      await sendMessage(
+      const completed = await sendMessage(
         {
           model,
           message: serverMessage,
@@ -175,9 +194,19 @@ export function useChatStream(conversationId: Ref<string | undefined>) {
           newConversationId,
           onStreamEnd,
         }),
+        abortController.signal,
       )
+
+      // Only call onStreamEnd if not aborted (aborted streams handle their own cleanup)
+      if (!completed) {
+        // Stream was aborted - ensure streaming state is reset
+        isStreaming.value = false
+        isThinking.value = false
+      }
     } catch (error) {
       handleStreamError(error, '')
+    } finally {
+      abortController = null
     }
   }
 
@@ -201,10 +230,13 @@ export function useChatStream(conversationId: Ref<string | undefined>) {
       throw new Error('Cannot retry without a conversation ID')
     }
 
+    // Create new AbortController for this stream
+    abortController = new AbortController()
+
     isStreaming.value = true
 
     try {
-      await retryMessage(
+      const completed = await retryMessage(
         {
           messageId,
           conversationId: conversationId.value,
@@ -220,9 +252,19 @@ export function useChatStream(conversationId: Ref<string | undefined>) {
           onInvalidate,
           onStreamEnd,
         }),
+        abortController.signal,
       )
+
+      // Only call onStreamEnd if not aborted (aborted streams handle their own cleanup)
+      if (!completed) {
+        // Stream was aborted - ensure streaming state is reset
+        isStreaming.value = false
+        isThinking.value = false
+      }
     } catch (error) {
       handleStreamError(error, 'retry')
+    } finally {
+      abortController = null
     }
   }
 
@@ -232,6 +274,7 @@ export function useChatStream(conversationId: Ref<string | undefined>) {
     newConversationId,
     send,
     retry,
+    stop,
     messages,
     resetMessages,
   }

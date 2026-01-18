@@ -19,18 +19,22 @@ export type StreamHandler = (frame: StreamFrame) => void
 
 /**
  * Stream NDJSON from an endpoint and call onFrame for each parsed frame
+ * @param signal - Optional AbortSignal to cancel the stream
+ * @returns true if completed normally, false if aborted
  */
 async function streamFromEndpoint(
   url: string,
   body: object,
   onFrame: StreamHandler,
-): Promise<void> {
+  signal?: AbortSignal,
+): Promise<boolean> {
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
+    signal,
   })
 
   if (!response.ok) {
@@ -45,53 +49,66 @@ async function streamFromEndpoint(
   const decoder = new TextDecoder()
   let buffer = ''
 
-  while (true) {
-    const { done, value } = await reader.read()
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
 
-    if (done) {
-      break
-    }
+      if (done) {
+        break
+      }
 
-    // Decode the chunk and add to buffer
-    buffer += decoder.decode(value, { stream: true })
+      // Decode the chunk and add to buffer
+      buffer += decoder.decode(value, { stream: true })
 
-    // Process complete lines (NDJSON format)
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || '' // Keep incomplete line in buffer
+      // Process complete lines (NDJSON format)
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || '' // Keep incomplete line in buffer
 
-    for (const line of lines) {
-      if (!line.trim()) continue
+      for (const line of lines) {
+        if (!line.trim()) continue
 
-      try {
-        const frame = JSON.parse(line) as StreamFrame
-        onFrame(frame)
-      } catch (parseError) {
-        console.error('Error parsing frame:', parseError, 'Line:', line)
+        try {
+          const frame = JSON.parse(line) as StreamFrame
+          onFrame(frame)
+        } catch (parseError) {
+          console.error('Error parsing frame:', parseError, 'Line:', line)
+        }
       }
     }
-  }
 
-  // Process any remaining buffer
-  if (buffer.trim()) {
-    try {
-      const frame = JSON.parse(buffer) as StreamFrame
-      onFrame(frame)
-    } catch {
-      // Ignore parse errors for incomplete frames
+    // Process any remaining buffer
+    if (buffer.trim()) {
+      try {
+        const frame = JSON.parse(buffer) as StreamFrame
+        onFrame(frame)
+      } catch {
+        // Ignore parse errors for incomplete frames
+      }
     }
+
+    return true // Completed normally
+  } catch (error) {
+    // Handle abort gracefully - not an error condition
+    if (error instanceof Error && error.name === 'AbortError') {
+      return false // Aborted by user
+    }
+    throw error // Re-throw other errors
   }
 }
 
 /**
  * Send a message and stream the response
+ * @param signal - Optional AbortSignal to cancel the stream
+ * @returns true if completed normally, false if aborted
  */
 export async function sendMessage(
   options: SendMessageOptions,
   onFrame: StreamHandler,
-): Promise<void> {
+  signal?: AbortSignal,
+): Promise<boolean> {
   const { model, message, conversationId, webTools, think } = options
 
-  await streamFromEndpoint(
+  return streamFromEndpoint(
     getApiUrl(API_CONFIG.endpoints.chat.stream),
     {
       model,
@@ -101,19 +118,23 @@ export async function sendMessage(
       think,
     },
     onFrame,
+    signal,
   )
 }
 
 /**
  * Retry a message and stream the response
+ * @param signal - Optional AbortSignal to cancel the stream
+ * @returns true if completed normally, false if aborted
  */
 export async function retryMessage(
   options: RetryMessageOptions,
   onFrame: StreamHandler,
-): Promise<void> {
+  signal?: AbortSignal,
+): Promise<boolean> {
   const { messageId, conversationId, model, think, webTools } = options
 
-  await streamFromEndpoint(
+  return streamFromEndpoint(
     getApiUrl(API_CONFIG.endpoints.chat.retry),
     {
       messageId,
@@ -123,6 +144,7 @@ export async function retryMessage(
       webTools,
     },
     onFrame,
+    signal,
   )
 }
 

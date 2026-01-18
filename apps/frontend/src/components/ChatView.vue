@@ -4,8 +4,16 @@ import ChatMessages from './chat/ChatMessages.vue'
 import ChatInput from './chat/ChatInput.vue'
 import type { ChatMessage } from '@/types/chat'
 
-const { chatMd, isStreaming, isThinking, sendMessage, files, attachImageToChat, retryMessage } =
-  useChat()
+const {
+  chatMd,
+  isStreaming,
+  isThinking,
+  sendMessage,
+  stopGeneration,
+  files,
+  attachImageToChat,
+  retryMessage,
+} = useChat()
 
 async function handleSend(message: string) {
   const userMessage: ChatMessage = {
@@ -19,6 +27,10 @@ async function handleSend(message: string) {
 async function handleRetry(assistantMessageId: number) {
   await retryMessage(assistantMessageId)
 }
+
+function handleStop() {
+  stopGeneration()
+}
 </script>
 
 <template>
@@ -29,7 +41,13 @@ async function handleRetry(assistantMessageId: number) {
       :is-thinking="isThinking"
       @retry="handleRetry"
     />
-    <ChatInput :files :disabled="isStreaming" @send="handleSend" @attach="attachImageToChat" />
+    <ChatInput
+      :files
+      :is-streaming="isStreaming"
+      @send="handleSend"
+      @stop="handleStop"
+      @attach="attachImageToChat"
+    />
   </div>
 </template>
 
