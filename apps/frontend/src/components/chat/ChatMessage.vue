@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ChatMessage } from '@/types/chat'
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import Spinner from '@/components/ui/spinner/Spinner.vue'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ChevronDown, ChevronUp, Globe, AlertCircle, RotateCcw } from 'lucide-vue-next'
@@ -30,6 +30,7 @@ const isUser = computed(() => props.message.role === 'user')
 const isAssistant = computed(() => props.message.role === 'assistant')
 const isTool = computed(() => props.message.role === 'tool')
 const hasError = computed(() => props.message.isError === true)
+const runCodeTab = ref<'code' | 'result'>('result')
 
 const toolPayload = computed(() => {
   if (!isTool.value || !props.message.content) {
@@ -109,6 +110,13 @@ function handleBranch() {
     emit('branch', props.message.id)
   }
 }
+
+watch(
+  () => props.message.id,
+  () => {
+    runCodeTab.value = 'result'
+  }
+)
 </script>
 
 <template>
@@ -196,21 +204,40 @@ function handleBranch() {
           </li>
         </ul>
         <div v-else-if="message.toolName === 'runCode'" class="flex flex-col gap-3">
-          <div v-if="codeLanguageLabel" class="text-xs uppercase text-muted-foreground tracking-wide">
-            {{ codeLanguageLabel }}
-          </div>
-          <pre v-if="codeContent?.length" class="rounded-md bg-muted p-3 text-sm">
-            <code class="whitespace-pre-wrap">{{ codeContent }}</code>
-          </pre>
-          <div class="flex flex-col gap-1">
-            <div class="text-xs uppercase text-muted-foreground tracking-wide">Output</div>
-            <pre class="rounded-md bg-muted p-3 text-sm">
-              <code class="whitespace-pre-wrap">{{ codeOutput || '' }}</code>
-            </pre>
-          </div>
-          <div v-if="codeError || codeTimedOut" class="text-sm text-destructive whitespace-pre-wrap">
-            <div v-if="codeTimedOut">Execution timed out.</div>
-            <div v-else>{{ codeError }}</div>
+          <div class="rounded-md border overflow-hidden">
+            <div class="flex items-center justify-between bg-muted px-3 py-2 text-xs">
+              <div class="uppercase tracking-wide text-muted-foreground">
+                {{ codeLanguageLabel || 'Code' }}
+              </div>
+              <div class="flex items-center gap-2">
+                <button
+                  class="rounded px-2 py-1 transition"
+                  :class="runCodeTab === 'code' ? 'bg-background text-foreground' : 'text-muted-foreground'"
+                  type="button"
+                  @click="runCodeTab = 'code'"
+                >
+                  Code
+                </button>
+                <button
+                  class="rounded px-2 py-1 transition"
+                  :class="runCodeTab === 'result' ? 'bg-background text-foreground' : 'text-muted-foreground'"
+                  type="button"
+                  @click="runCodeTab = 'result'"
+                >
+                  Result
+                </button>
+              </div>
+            </div>
+            <div class="p-3">
+              <pre v-if="runCodeTab === 'code'" class="text-sm">
+                <code class="whitespace-pre-wrap">{{ codeContent || '' }}</code>
+              </pre>
+              <pre v-else class="text-sm">
+                <code class="whitespace-pre-wrap">{{
+                  codeTimedOut ? 'Execution timed out.' : (codeError || codeOutput || '')
+                }}</code>
+              </pre>
+            </div>
           </div>
           <div v-if="codeExitCode !== null" class="text-xs text-muted-foreground">
             Exit code: {{ codeExitCode }}
