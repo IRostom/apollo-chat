@@ -31,15 +31,70 @@ const isAssistant = computed(() => props.message.role === 'assistant')
 const isTool = computed(() => props.message.role === 'tool')
 const hasError = computed(() => props.message.isError === true)
 
-const toolResult = computed(() => {
-  if (!isTool.value) {
+const toolPayload = computed(() => {
+  if (!isTool.value || !props.message.content) {
     return undefined
   }
-  if (props.message.toolName === 'webSearch') {
-    const json = JSON.parse(props.message.content)
-    return json.results
+  try {
+    return JSON.parse(props.message.content)
+  } catch {
+    return undefined
   }
-  return props.message.content
+})
+
+type WebSearchResult = {
+  url: string
+  title: string
+}
+
+const webSearchResults = computed((): WebSearchResult[] | undefined => {
+  if (!isTool.value || props.message.toolName !== 'webSearch') {
+    return undefined
+  }
+  const results = (toolPayload.value as { results?: unknown } | undefined)?.results
+  if (Array.isArray(results)) {
+    return results as WebSearchResult[]
+  }
+  return undefined
+})
+
+
+const codeLanguage = computed(() => {
+  return props.message.codeLanguage ?? (toolPayload.value as { language?: string } | undefined)?.language
+})
+
+const codeLanguageLabel = computed(() => {
+  if (codeLanguage.value === 'javascript') {
+    return 'JavaScript'
+  }
+  if (codeLanguage.value === 'python') {
+    return 'Python'
+  }
+  return codeLanguage.value
+})
+
+const codeContent = computed(() => {
+  return props.message.codeContent ?? (toolPayload.value as { code?: string } | undefined)?.code
+})
+
+const codeOutput = computed(() => {
+  return (
+    (toolPayload.value as { stdout?: string; output?: string } | undefined)?.stdout ??
+    (toolPayload.value as { output?: string } | undefined)?.output
+  )
+})
+
+const codeError = computed(() => {
+  return (toolPayload.value as { error?: string; stderr?: string } | undefined)?.error ??
+    (toolPayload.value as { stderr?: string } | undefined)?.stderr
+})
+
+const codeExitCode = computed(() => {
+  return (toolPayload.value as { exitCode?: number | null } | undefined)?.exitCode ?? null
+})
+
+const codeTimedOut = computed(() => {
+  return (toolPayload.value as { timedOut?: boolean } | undefined)?.timedOut === true
 })
 
 function handleRetry() {
@@ -136,10 +191,31 @@ function handleBranch() {
       </CollapsibleTrigger>
       <CollapsibleContent class="mt-2 max-h-60 overflow-y-auto p-3 pt-0">
         <ul v-if="message.toolName === 'webSearch'" class="flex flex-col">
-          <li v-for="result of toolResult" :key="result.url" class="text-nowrap">
+          <li v-for="result of webSearchResults" :key="result.url" class="text-nowrap">
             <a target="_blank" :href="result.url">{{ result.title }}</a>
           </li>
         </ul>
+        <div v-else-if="message.toolName === 'runCode'" class="flex flex-col gap-3">
+          <div v-if="codeLanguageLabel" class="text-xs uppercase text-muted-foreground tracking-wide">
+            {{ codeLanguageLabel }}
+          </div>
+          <pre v-if="codeContent?.length" class="rounded-md bg-muted p-3 text-sm">
+            <code class="whitespace-pre-wrap">{{ codeContent }}</code>
+          </pre>
+          <div class="flex flex-col gap-1">
+            <div class="text-xs uppercase text-muted-foreground tracking-wide">Output</div>
+            <pre class="rounded-md bg-muted p-3 text-sm">
+              <code class="whitespace-pre-wrap">{{ codeOutput || '' }}</code>
+            </pre>
+          </div>
+          <div v-if="codeError || codeTimedOut" class="text-sm text-destructive whitespace-pre-wrap">
+            <div v-if="codeTimedOut">Execution timed out.</div>
+            <div v-else>{{ codeError }}</div>
+          </div>
+          <div v-if="codeExitCode !== null" class="text-xs text-muted-foreground">
+            Exit code: {{ codeExitCode }}
+          </div>
+        </div>
         <div v-else>
           {{ message.content }}
         </div>

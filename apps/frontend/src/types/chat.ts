@@ -19,6 +19,8 @@ export interface ChatMessage {
   id?: number
   thinking?: string
   toolName?: string
+  codeLanguage?: string
+  codeContent?: string
   images?: number[] | string[]
   isError?: boolean
 }
@@ -56,6 +58,8 @@ export type StreamFrameType =
   | 'error'
   | 'toolName'
   | 'toolValue'
+  | 'codeLanguage'
+  | 'codeContent'
   | 'thinking'
   | 'isThinking'
   | 'role'
