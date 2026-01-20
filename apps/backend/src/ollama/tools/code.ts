@@ -56,7 +56,7 @@ export const codeTools = {
       return result;
     } catch (error) {
       console.error("Error calling runCode:", error);
-      return { error: `Error calling runCode: ${error}` };
+      return { error: "Error calling runCode." };
     }
   },
 };

@@ -22,6 +22,7 @@ const DEFAULT_MEMORY_BYTES = 128 * 1024 * 1024;
 const DEFAULT_CPU_PERIOD = 100_000;
 const DEFAULT_CPU_QUOTA = 100_000;
 const DEFAULT_PIDS_LIMIT = 64;
+const MAX_OUTPUT_BYTES = 64 * 1024;
 
 function createDockerClient(): Docker {
   const socketPath = process.env.DOCKER_SOCKET_PATH;
@@ -83,6 +84,7 @@ export async function runCodeInContainer(
     Tty: false,
     AttachStdout: true,
     AttachStderr: true,
+    User: "nobody",
     HostConfig: {
       AutoRemove: true,
       NetworkMode: "none",
@@ -91,6 +93,8 @@ export async function runCodeInContainer(
       CpuQuota: DEFAULT_CPU_QUOTA,
       PidsLimit: DEFAULT_PIDS_LIMIT,
       ReadonlyRootfs: true,
+      CapDrop: ["ALL"],
+      SecurityOpt: ["no-new-privileges"],
     },
   });
 
@@ -98,12 +102,35 @@ export async function runCodeInContainer(
   const stderrStream = new PassThrough();
   let stdout = "";
   let stderr = "";
+  let stdoutSize = 0;
+  let stderrSize = 0;
+  const appendWithLimit = (
+    current: string,
+    currentSize: number,
+    chunk: Buffer
+  ): { text: string; size: number } => {
+    if (currentSize >= MAX_OUTPUT_BYTES) {
+      return { text: current, size: currentSize };
+    }
+    const remainingBytes = MAX_OUTPUT_BYTES - currentSize;
+    const chunkText = chunk.toString();
+    const truncatedChunk = Buffer.from(chunkText)
+      .subarray(0, remainingBytes)
+      .toString();
+    const nextText = current + truncatedChunk;
+    const nextSize = currentSize + Buffer.byteLength(truncatedChunk);
+    return { text: nextText, size: nextSize };
+  };
 
   stdoutStream.on("data", (chunk) => {
-    stdout += chunk.toString();
+    const next = appendWithLimit(stdout, stdoutSize, chunk as Buffer);
+    stdout = next.text;
+    stdoutSize = next.size;
   });
   stderrStream.on("data", (chunk) => {
-    stderr += chunk.toString();
+    const next = appendWithLimit(stderr, stderrSize, chunk as Buffer);
+    stderr = next.text;
+    stderrSize = next.size;
   });
 
   const attachStream = await container.attach({

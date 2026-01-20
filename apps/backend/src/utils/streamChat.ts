@@ -157,7 +157,7 @@ export async function streamChatResponse(
           // Execute tools and append tool results
           for (const toolCall of part.message.tool_calls) {
             const availableTools = {
-              ...availableWebTools,
+              ...(webTools ? availableWebTools : {}),
               ...codeTools,
             };
             const functionToCall =
