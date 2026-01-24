@@ -44,9 +44,10 @@ function handleStop() {
         <div class="w-full">
           <ChatInput
             :files
-            :disabled="isStreaming"
+            :is-streaming="isStreaming"
             @send="handleSend"
             @attach="attachImageToChat"
+            @stop="handleStop"
           />
         </div>
       </div>
