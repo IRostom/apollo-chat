@@ -250,7 +250,7 @@ onUnmounted(() => {
 
           <!-- Stop button - shown while streaming -->
           <InputGroupButton
-            v-if="true"
+            v-if="isStreaming"
             variant="destructive"
             class="rounded-full ml-auto"
             size="icon-xs"
@@ -268,6 +268,7 @@ onUnmounted(() => {
             size="icon-xs"
             @click="send()"
             :disabled="
+              isStreaming ||
               !userSelectedModelName?.length ||
               isTranscribing ||
               isRecording ||
@@ -285,7 +286,7 @@ onUnmounted(() => {
             class="rounded-full ml-auto"
             size="icon-xs"
             @click="isRecording ? stopRecordingAndTranscribe() : startRecording()"
-            :disabled="isTranscribing"
+            :disabled="isStreaming || isTranscribing"
           >
             <Square v-if="isRecording" class="size-4" />
             <Mic v-else-if="!isTranscribing" class="size-4" />
