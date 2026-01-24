@@ -26,6 +26,7 @@ export interface StreamChatOptions {
 /**
  * Stream a chat response from Ollama to the client
  * Handles the streaming loop, tool execution, and error recovery
+ * Automatically handles client disconnection by aborting the Ollama stream
  *
  * @throws Error if streaming fails (caller should handle)
  */
@@ -37,9 +38,48 @@ export async function streamChatResponse(
   let fullReply = "";
   let thinkingResponse = "";
   let ollamaResponse: AbortableAsyncIterator<ChatResponse> | null = null;
+  let isAborted = false;
+
+  // Handle client disconnection (e.g., user clicked stop)
+  const handleClose = async () => {
+    if (isAborted) return; // Already handled
+    isAborted = true;
+    console.log("Client disconnected, aborting stream...");
+
+    // Abort the Ollama stream
+    if (ollamaResponse) {
+      ollamaResponse.abort();
+    }
+
+    // Save partial response if any content was generated
+    if (fullReply || thinkingResponse) {
+      try {
+        await addMessageToChat({
+          conversation_id: conversationId,
+          content: fullReply ?? "",
+          role: "assistant",
+          thinking: thinkingResponse || undefined,
+          metadata: JSON.stringify({
+            done: false,
+            done_reason: "user_stopped",
+          }),
+        });
+        console.log("Partial response saved after user stop");
+      } catch (saveError) {
+        console.error("Failed to save partial response:", saveError);
+      }
+    }
+  };
+
+  // Register close handler
+  res.on("close", handleClose);
 
   try {
     while (true) {
+      // Check if aborted before starting new iteration
+      if (isAborted) {
+        break;
+      }
       // ---- Stream model output ----
       ollamaResponse = await ollamaClient.chat({
         model,
@@ -170,6 +210,11 @@ export async function streamChatResponse(
 
       // If no tool calls, we're done streaming
       if (!hadToolCalls) {
+        // Check if aborted before saving
+        if (isAborted) {
+          break;
+        }
+
         console.log("Streaming about to end...");
         // Persist assistant reply
         await addMessageToChat({
@@ -187,6 +232,12 @@ export async function streamChatResponse(
       // Otherwise, loop continues with tool results added to history
     }
   } catch (err) {
+    // If aborted by user, the close handler already saved partial response
+    if (isAborted) {
+      console.log("Stream aborted by user");
+      return;
+    }
+
     console.error(err);
 
     // Abort ongoing Ollama stream to free resources
@@ -213,5 +264,8 @@ export async function streamChatResponse(
       })
     );
     res.end();
+  } finally {
+    // Clean up the close handler
+    res.off("close", handleClose);
   }
 }

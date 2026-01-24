@@ -37,16 +37,17 @@ import Spinner from '../ui/spinner/Spinner.vue'
 import { toast } from 'vue-sonner'
 
 interface Props {
-  disabled?: boolean
+  isStreaming?: boolean
   files?: ChatFile[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  disabled: false,
+  isStreaming: false,
 })
 
 const emit = defineEmits<{
   send: [message: string]
+  stop: []
   attach: [file: File]
 }>()
 
@@ -76,15 +77,19 @@ const canUseWebTools = computed(() => appStore.canUseWebTools)
 const supportsVision = computed(() => appStore.supportsVision)
 
 function send() {
-  if (props.disabled || !userSelectedModelName.value?.length || !userMsg.value.trim()) {
+  if (props.isStreaming || !userSelectedModelName.value?.length || !userMsg.value.trim()) {
     return
   }
   emit('send', userMsg.value)
   userMsg.value = ''
 }
 
+function stop() {
+  emit('stop')
+}
+
 function onEnterKey(e: KeyboardEvent) {
-  if (props.disabled || !userSelectedModelName.value?.length || !userMsg.value.trim()) return
+  if (props.isStreaming || !userSelectedModelName.value?.length || !userMsg.value.trim()) return
   // If the user held Shift, we let the textarea handle it (newline)
   if (e.shiftKey) return
 
@@ -162,7 +167,7 @@ onUnmounted(() => {
         v-model="userMsg"
         @keydown.enter="onEnterKey"
         placeholder="Ask anything"
-        :disabled="disabled || isTranscribing || isRecording"
+        :disabled="isStreaming || isTranscribing || isRecording"
       />
       <InputGroupAddon align="block-end">
         <InputGroupButton variant="outline" class="rounded-full" size="icon-xs">
@@ -243,14 +248,27 @@ onUnmounted(() => {
             </DropdownMenuContent>
           </DropdownMenu>
 
+          <!-- Stop button - shown while streaming -->
           <InputGroupButton
-            v-if="userMsg.trim().length || !canRecord"
+            v-if="isStreaming"
+            variant="destructive"
+            class="rounded-full ml-auto"
+            size="icon-xs"
+            @click="stop()"
+          >
+            <Square class="size-4" />
+            <span class="sr-only">Stop generation</span>
+          </InputGroupButton>
+
+          <!-- Send button - shown when there's text or can't record -->
+          <InputGroupButton
+            v-else-if="userMsg.trim().length || !canRecord"
             variant="default"
             class="rounded-full ml-auto"
             size="icon-xs"
             @click="send()"
             :disabled="
-              disabled ||
+              isStreaming ||
               !userSelectedModelName?.length ||
               isTranscribing ||
               isRecording ||
@@ -261,13 +279,14 @@ onUnmounted(() => {
             <span class="sr-only">Send</span>
           </InputGroupButton>
 
+          <!-- Record button - shown when can record and no text -->
           <InputGroupButton
             v-else-if="canRecord"
             variant="default"
             class="rounded-full ml-auto"
             size="icon-xs"
             @click="isRecording ? stopRecordingAndTranscribe() : startRecording()"
-            :disabled="isTranscribing"
+            :disabled="isStreaming || isTranscribing"
           >
             <Square v-if="isRecording" class="size-4" />
             <Mic v-else-if="!isTranscribing" class="size-4" />
