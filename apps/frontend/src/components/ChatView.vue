@@ -71,38 +71,18 @@ async function handleBranch(assistantMessageId: number) {
       <div class="max-w-3xl w-full flex flex-col items-center gap-8">
         <p class="text-2xl text-muted-foreground">How can I help you today?</p>
         <div class="w-full">
-          <ChatInput
-            :files
-            :is-streaming="isStreaming"
-            @send="handleSend"
-            @attach="attachImageToChat"
-            @stop="handleStop"
-          />
+          <ChatInput :files :is-streaming="isStreaming" @send="handleSend" @attach="attachImageToChat"
+            @stop="handleStop" />
         </div>
       </div>
     </div>
     <div v-else class="flex-1 overflow-auto">
-      <ChatMessages
-        :messages="chatMd"
-        :is-streaming="isStreaming"
-        :is-thinking="isThinking"
-        @retry="handleRetry"
-      />
+      <ChatMessages :messages="chatMd" :is-streaming="isStreaming" :is-thinking="isThinking" @retry="handleRetry"
+        @edit="handleEdit" @branch="handleBranch" @copy="handleCopy" />
     </div>
-    <ChatInput
-      :files
-      :is-streaming="isStreaming"
-      @send="handleSend"
-      @stop="handleStop"
-      @attach="attachImageToChat"
-      :is-thinking="isThinking"
-      @retry="handleRetry"
-      @edit="handleEdit"
-      @branch="handleBranch"
-      @copy="handleCopy"
-      @cancel-edit="cancelEdit"
-      :editing-content="editingMessage?.content"
-    />
+    <ChatInput :files :is-streaming="isStreaming" @send="handleSend" @stop="handleStop" @attach="attachImageToChat"
+      :is-thinking="isThinking" @retry="handleRetry" @edit="handleEdit" @branch="handleBranch" @copy="handleCopy"
+      @cancel-edit="cancelEdit" :editing-content="editingMessage?.content" />
   </div>
 </template>
 

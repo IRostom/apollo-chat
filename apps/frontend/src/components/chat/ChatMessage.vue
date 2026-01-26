@@ -115,7 +115,7 @@ function handleBranch() {
     </div>
 
     <MessageTools
-      v-if="!hasError"
+      v-if="!hasError && !isThinking && !!message.content && message.content.trim().length > 0"
       role="assistant"
       class="mt-2 opacity-0 group-hover:opacity-100 transition-opacity"
       @copy="emit('copy', message.content)"
