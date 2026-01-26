@@ -100,7 +100,7 @@ watch(
             <CollapsibleContent class="mt-2 max-h-60 overflow-y-auto p-3 pt-0">
                 <ul v-if="message.toolName === 'webSearch'" class="flex flex-col">
                     <li v-for="result of webSearchResults" :key="result.url" class="text-nowrap">
-                        <a target="_blank" :href="result.url">{{ result.title }}</a>
+                        <a target="_blank" rel="noopener noreferrer" :href="result.url">{{ result.title }}</a>
                     </li>
                 </ul>
                 <div v-else-if="message.toolName === 'runCode'" class="flex flex-col gap-3">
