@@ -24,6 +24,18 @@ const DEFAULT_CPU_QUOTA = 100_000;
 const DEFAULT_PIDS_LIMIT = 64;
 const MAX_OUTPUT_BYTES = 64 * 1024;
 
+function isNotFoundError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const candidate = error as { statusCode?: number; message?: string; reason?: string };
+  if (candidate.statusCode === 404) {
+    return true;
+  }
+  const message = `${candidate.message ?? ""} ${candidate.reason ?? ""}`.trim();
+  return message ? /no such container/i.test(message) : false;
+}
+
 function createDockerClient(): Docker {
   const socketPath = process.env.DOCKER_SOCKET_PATH;
   if (socketPath && socketPath.trim()) {
@@ -149,12 +161,19 @@ export async function runCodeInContainer(
 
   let timedOut = false;
   const waitPromise = container.wait();
+  const waitPromiseHandled = waitPromise.catch((error) => {
+    if (isNotFoundError(error)) {
+      return undefined;
+    }
+    console.warn("container.wait error:", error);
+    throw error;
+  });
   let timeoutId: NodeJS.Timeout | undefined;
   const timeoutPromise = new Promise<"timeout">((resolve) => {
     timeoutId = setTimeout(() => resolve("timeout"), timeoutMs);
   });
 
-  const waitResult = await Promise.race([waitPromise, timeoutPromise]);
+  const waitResult = await Promise.race([waitPromiseHandled, timeoutPromise]);
   if (timeoutId) {
     clearTimeout(timeoutId);
   }
