@@ -84,6 +84,15 @@ export interface RetryMessageOptions {
   webTools?: boolean
 }
 
+export interface EditMessageOptions {
+  messageId: number
+  conversationId: string
+  content: string
+  model: string
+  think?: boolean
+  webTools?: boolean
+}
+
 export interface ChatFile {
   file: File
   isUploaded: boolean

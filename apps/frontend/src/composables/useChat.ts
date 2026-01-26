@@ -4,7 +4,7 @@
  * Responsibility: Combine local + server history, routing, store values, markdown, file uploads
  */
 
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useChatStream } from '@/queries/useChatStream'
 import { useChatHistory } from '@/queries/useChatHistory'
 import { useConversationRoute } from './useConversationRoute'
@@ -14,6 +14,7 @@ import type { ChatMessage } from '@/types/chat'
 import { useUploadFile } from '@/queries/upload'
 import { toast } from 'vue-sonner'
 import { useQueryClient } from '@tanstack/vue-query'
+import { branchConversation as branchConversationApi } from '@/api/chatService'
 
 /**
  * Chat state and operations
@@ -29,12 +30,16 @@ export function useChat() {
     send: sendStreamMessage,
     retry: retryStreamMessage,
     stop: stopGeneration,
+    edit: editStreamMessage,
     isStreaming,
     isThinking,
     newConversationId,
     messages: localHistory,
     resetMessages,
   } = useChatStream(conversationId)
+
+  // Track the message being edited
+  const editingMessage = ref<ChatMessage | null>(null)
 
   const {
     data: chatHistoryServer,
@@ -83,6 +88,7 @@ export function useChat() {
   // Reset local messages when server history changes (conversation loaded)
   watch(chatHistoryServer, () => {
     resetMessages()
+    editingMessage.value = null
   })
 
   // Reset local messages when navigating to a new conversation
@@ -90,6 +96,7 @@ export function useChat() {
     if (!id) {
       resetMessages()
     }
+    editingMessage.value = null
   })
 
   /**
@@ -179,14 +186,102 @@ export function useChat() {
     })
   }
 
+  /**
+   * Start editing a user message
+   * Sets the editing state which should be used to populate the input
+   */
+  function editMessage(message: ChatMessage) {
+    editingMessage.value = message
+  }
+
+  /**
+   * Cancel editing mode
+   */
+  function cancelEdit() {
+    editingMessage.value = null
+  }
+
+  /**
+   * Submit an edited message
+   * Updates the user message and regenerates the response
+   */
+  async function submitEditedMessage(newContent: string) {
+    if (!appStore.userSelectedModel) {
+      throw new Error('No model selected. Please select a model before editing.')
+    }
+
+    if (!conversationId.value) {
+      console.error('Cannot edit without a conversation ID')
+      return
+    }
+
+    if (!editingMessage.value?.id) {
+      console.error('No message being edited or message has no ID')
+      return
+    }
+
+    const messageId = editingMessage.value.id
+
+    // Clear editing state
+    editingMessage.value = null
+
+    // Call the edit endpoint
+    await editStreamMessage({
+      messageId,
+      content: newContent,
+      model: appStore.userSelectedModelName!,
+      think: appStore.canThink && appStore.shouldThink,
+      webTools: appStore.canUseWebTools && appStore.useWebTools,
+      onStreamEnd: () => {
+        // Invalidate the chat history query to refetch from server
+        queryClient.invalidateQueries({ queryKey: ['chat', conversationId.value] })
+      },
+      onInvalidate: () => {
+        // Invalidate the chat history query to refetch from server
+        queryClient.invalidateQueries({ queryKey: ['chat', conversationId.value] })
+      },
+    })
+  }
+
+  /**
+   * Branch the conversation from a specific assistant message
+   * Creates a new conversation with messages up to that point
+   */
+  async function branchConversation(assistantMessageId: number) {
+    if (!conversationId.value) {
+      console.error('Cannot branch without a conversation ID')
+      return
+    }
+
+    try {
+      const result = await branchConversationApi(conversationId.value, assistantMessageId)
+
+      // Invalidate the chats list to show the new conversation
+      queryClient.invalidateQueries({ queryKey: ['chats'] })
+
+      // Navigate to the new conversation
+      navigateToConversation(result.conversationId)
+
+      toast.success('Conversation branched successfully')
+    } catch (error) {
+      console.error('Failed to branch conversation:', error)
+      toast.error('Failed to branch conversation')
+    }
+  }
+
   return {
     chatMd: combinedChatMd,
     files,
     isStreaming,
     isThinking,
+    editingMessage,
     sendMessage,
     stopGeneration,
     attachImageToChat,
     retryMessage,
+    editMessage,
+    cancelEdit,
+    submitEditedMessage,
+    branchConversation,
   }
 }

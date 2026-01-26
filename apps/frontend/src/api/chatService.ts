@@ -7,6 +7,7 @@ import { getApiUrl, API_CONFIG } from '@/config/api'
 import type {
   ChatMessageServer,
   Conversation,
+  EditMessageOptions,
   RetryMessageOptions,
   SendMessageOptions,
   StreamFrame,
@@ -149,6 +150,33 @@ export async function retryMessage(
 }
 
 /**
+ * Edit a user message and stream the new response
+ * @param signal - Optional AbortSignal to cancel the stream
+ * @returns true if completed normally, false if aborted
+ */
+export async function editMessage(
+  options: EditMessageOptions,
+  onFrame: StreamHandler,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const { messageId, conversationId, content, model, think, webTools } = options
+
+  return streamFromEndpoint(
+    getApiUrl(API_CONFIG.endpoints.chat.edit),
+    {
+      messageId,
+      conversationId,
+      content,
+      model,
+      think,
+      webTools,
+    },
+    onFrame,
+    signal,
+  )
+}
+
+/**
  * Get a conversation by ID
  */
 export async function getConversation(id: string): Promise<ChatMessageServer[]> {
@@ -170,6 +198,33 @@ export async function getConversations(): Promise<Conversation[]> {
 
   if (!response.ok) {
     throw new Error(`network response failed: ${response.statusText}`)
+  }
+
+  return response.json()
+}
+
+/**
+ * Branch a conversation from a specific message
+ * Creates a new conversation with messages up to the specified message
+ */
+export async function branchConversation(
+  conversationId: string,
+  messageId: number,
+): Promise<{ conversationId: string }> {
+  const response = await fetch(getApiUrl(API_CONFIG.endpoints.chat.branch), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      conversationId,
+      messageId,
+    }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.error || 'Failed to branch conversation')
   }
 
   return response.json()

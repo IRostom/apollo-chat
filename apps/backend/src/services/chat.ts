@@ -1,6 +1,6 @@
 import { db } from "../db/client";
 import { chatsTable, messagesTable } from "../db/schema";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, lte } from "drizzle-orm";
 import { Message } from "ollama";
 import { convertImageIdsToBase64 } from "../utils/imageUtils";
 
@@ -10,6 +10,14 @@ export async function createChat(chat: typeof chatsTable.$inferInsert) {
     .values(chat)
     .returning({ insertedId: chatsTable.id });
   return conv.insertedId;
+}
+
+export async function getChatById(id: number) {
+  const [chat] = await db
+    .select()
+    .from(chatsTable)
+    .where(eq(chatsTable.id, id));
+  return chat;
 }
 
 export async function getChatHistory(id: number) {
@@ -50,6 +58,72 @@ export async function deleteMessagesAfterUserMessage(
         gt(messagesTable.id, userMessageId)
       )
     );
+}
+
+export async function updateMessageContent(
+  messageId: number,
+  conversationId: number,
+  content: string
+) {
+  return db
+    .update(messagesTable)
+    .set({ content })
+    .where(
+      and(
+        eq(messagesTable.id, messageId),
+        eq(messagesTable.conversation_id, conversationId)
+      )
+    );
+}
+
+/**
+ * Get messages up to and including a specific message ID
+ */
+export async function getMessagesUpTo(
+  conversationId: number,
+  messageId: number
+) {
+  return db
+    .select()
+    .from(messagesTable)
+    .where(
+      and(
+        eq(messagesTable.conversation_id, conversationId),
+        lte(messagesTable.id, messageId)
+      )
+    );
+}
+
+/**
+ * Copy messages from one conversation to another
+ * Creates new message records with the new conversation ID
+ */
+export async function copyMessagesToConversation(
+  messages: Array<{
+    content: string;
+    thinking: string | null;
+    tool_calls: string | null;
+    tool_name: string | null;
+    role: string;
+    images: string | null;
+    metadata: string | null;
+  }>,
+  newConversationId: number
+) {
+  if (messages.length === 0) return;
+
+  const messagesToInsert = messages.map((m) => ({
+    content: m.content,
+    thinking: m.thinking,
+    tool_calls: m.tool_calls,
+    tool_name: m.tool_name,
+    role: m.role,
+    images: m.images,
+    metadata: m.metadata,
+    conversation_id: newConversationId,
+  }));
+
+  return db.insert(messagesTable).values(messagesToInsert);
 }
 
 /**
