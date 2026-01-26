@@ -96,6 +96,18 @@ function createFrameHandler(options: FrameHandlerOptions): (frame: StreamFrame) 
         }
         break
 
+      case 'codeLanguage':
+        if (frame.value) {
+          messages.value[currIndex.value]!.codeLanguage = frame.value as string
+        }
+        break
+
+      case 'codeContent':
+        if (frame.value) {
+          messages.value[currIndex.value]!.codeContent = frame.value as string
+        }
+        break
+
       case 'end':
         isStreaming.value = false
         onStreamEnd?.()

@@ -3,11 +3,12 @@ import type { ChatMessage } from '@/types/chat'
 import { computed } from 'vue'
 import Spinner from '@/components/ui/spinner/Spinner.vue'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { ChevronDown, ChevronUp, Globe, AlertCircle, RotateCcw } from 'lucide-vue-next'
+import { ChevronDown, ChevronUp, AlertCircle, RotateCcw } from 'lucide-vue-next'
 import { getImageUrl } from '@/config/api'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import MessageTools from './MessageTools.vue'
+import ToolMessage from './ToolMessage.vue'
 
 interface Props {
   message: ChatMessage
@@ -30,17 +31,6 @@ const isUser = computed(() => props.message.role === 'user')
 const isAssistant = computed(() => props.message.role === 'assistant')
 const isTool = computed(() => props.message.role === 'tool')
 const hasError = computed(() => props.message.isError === true)
-
-const toolResult = computed(() => {
-  if (!isTool.value) {
-    return undefined
-  }
-  if (props.message.toolName === 'webSearch') {
-    const json = JSON.parse(props.message.content)
-    return json.results
-  }
-  return props.message.content
-})
 
 function handleRetry() {
   if (props.message.id) {
@@ -124,26 +114,5 @@ function handleBranch() {
     />
   </div>
 
-  <div v-else-if="isTool" class="mx-auto dark:prose-invert prose lg:prose-lg flex flex-col">
-    <Collapsible v-if="message.content?.length" class="border rounded-lg" v-slot="{ open }">
-      <CollapsibleTrigger class="py-2 px-3 cursor-pointer w-full text-start flex items-center">
-        <div class="flex items-center gap-2">
-          <Globe class="h-4 w-4" v-if="message.toolName === 'webSearch'" />
-          {{ message.toolName }}
-        </div>
-        <ChevronDown v-if="!open" class="ml-auto" />
-        <ChevronUp v-if="open" class="ml-auto" />
-      </CollapsibleTrigger>
-      <CollapsibleContent class="mt-2 max-h-60 overflow-y-auto p-3 pt-0">
-        <ul v-if="message.toolName === 'webSearch'" class="flex flex-col">
-          <li v-for="result of toolResult" :key="result.url" class="text-nowrap">
-            <a target="_blank" :href="result.url">{{ result.title }}</a>
-          </li>
-        </ul>
-        <div v-else>
-          {{ message.content }}
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
-  </div>
+  <ToolMessage v-else-if="isTool" :message="message" />
 </template>

@@ -24,6 +24,8 @@ services:
       - db-data:/app/data
       # Mount uploads directory for file persistence
       - uploads-data:/app/apps/backend/uploads
+      # Dev-only: grants host Docker access for code execution (unsafe for untrusted prod)
+      - /var/run/docker.sock:/var/run/docker.sock
     # Health check to ensure backend is ready before frontend starts
     healthcheck:
       test:

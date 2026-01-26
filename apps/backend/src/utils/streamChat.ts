@@ -11,6 +11,7 @@ import {
   webSearchTool,
   webTools as availableWebTools,
 } from "../ollama/tools/web";
+import { codeTools, runCodeTool } from "../ollama/tools/code";
 import { addMessageToChat } from "../services/chat";
 import { frame } from "./frame";
 
@@ -81,12 +82,17 @@ export async function streamChatResponse(
         break;
       }
       // ---- Stream model output ----
+      const tools = [
+        runCodeTool,
+        ...(webTools ? [webSearchTool, webFetchTool] : []),
+      ];
+
       ollamaResponse = await ollamaClient.chat({
         model,
         messages: [...chatHistory],
         stream: true,
         think: think ?? false,
-        tools: webTools ? [webSearchTool, webFetchTool] : [],
+        tools,
       } as any);
 
       // Reset for each iteration (tool call loop)
@@ -150,9 +156,13 @@ export async function streamChatResponse(
 
           // Execute tools and append tool results
           for (const toolCall of part.message.tool_calls) {
+            const availableTools = {
+              ...(webTools ? availableWebTools : {}),
+              ...codeTools,
+            };
             const functionToCall =
-              availableWebTools[
-                toolCall.function.name as keyof typeof availableWebTools
+              availableTools[
+                toolCall.function.name as keyof typeof availableTools
               ];
 
             if (functionToCall) {
@@ -168,6 +178,14 @@ export async function streamChatResponse(
 
               res.write(frame("role", { value: "tool" }));
               res.write(frame("toolName", { value: toolCall.function.name }));
+              if (toolCall.function.name === "runCode") {
+                if (typeof args?.language === "string") {
+                  res.write(frame("codeLanguage", { value: args.language }));
+                }
+                if (typeof args?.code === "string") {
+                  res.write(frame("codeContent", { value: args.code }));
+                }
+              }
               res.write(frame("toolValue", { value: JSON.stringify(output) }));
 
               console.log(toolCall.function.name, "returned result", "\n");
