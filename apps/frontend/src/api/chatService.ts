@@ -151,14 +151,17 @@ export async function retryMessage(
 
 /**
  * Edit a user message and stream the new response
+ * @param signal - Optional AbortSignal to cancel the stream
+ * @returns true if completed normally, false if aborted
  */
 export async function editMessage(
   options: EditMessageOptions,
   onFrame: StreamHandler,
-): Promise<void> {
+  signal?: AbortSignal,
+): Promise<boolean> {
   const { messageId, conversationId, content, model, think, webTools } = options
 
-  await streamFromEndpoint(
+  return streamFromEndpoint(
     getApiUrl(API_CONFIG.endpoints.chat.edit),
     {
       messageId,
@@ -169,6 +172,7 @@ export async function editMessage(
       webTools,
     },
     onFrame,
+    signal,
   )
 }
 

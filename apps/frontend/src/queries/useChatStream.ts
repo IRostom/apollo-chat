@@ -284,10 +284,13 @@ export function useChatStream(conversationId: Ref<string | undefined>) {
       throw new Error('Cannot edit without a conversation ID')
     }
 
+    // Create new AbortController for this stream
+    abortController = new AbortController()
+
     isStreaming.value = true
 
     try {
-      await editMessage(
+      const completed = await editMessage(
         {
           messageId,
           conversationId: conversationId.value,
@@ -304,9 +307,18 @@ export function useChatStream(conversationId: Ref<string | undefined>) {
           onInvalidate,
           onStreamEnd,
         }),
+        abortController.signal,
       )
+
+      if (!completed) {
+        // Stream was aborted - ensure streaming state is reset
+        isStreaming.value = false
+        isThinking.value = false
+      }
     } catch (error) {
       handleStreamError(error, 'edit')
+    } finally {
+      abortController = null
     }
   }
 
