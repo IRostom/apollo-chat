@@ -88,6 +88,7 @@ export function useChat() {
   // Reset local messages when server history changes (conversation loaded)
   watch(chatHistoryServer, () => {
     resetMessages()
+    editingMessage.value = null
   })
 
   // Reset local messages when navigating to a new conversation
@@ -95,6 +96,7 @@ export function useChat() {
     if (!id) {
       resetMessages()
     }
+    editingMessage.value = null
   })
 
   /**
