@@ -80,9 +80,21 @@ async function handleBranch(assistantMessageId: number) {
       <ChatMessages :messages="chatMd" :is-streaming="isStreaming" :is-thinking="isThinking" @retry="handleRetry"
         @edit="handleEdit" @branch="handleBranch" @copy="handleCopy" />
     </div>
-    <ChatInput :files :is-streaming="isStreaming" @send="handleSend" @stop="handleStop" @attach="attachImageToChat"
-      :is-thinking="isThinking" @retry="handleRetry" @edit="handleEdit" @branch="handleBranch" @copy="handleCopy"
-      @cancel-edit="cancelEdit" :editing-content="editingMessage?.content" />
+    <ChatInput
+      v-if="!isEmpty"
+      :files
+      :is-streaming="isStreaming"
+      @send="handleSend"
+      @stop="handleStop"
+      @attach="attachImageToChat"
+      :is-thinking="isThinking"
+      @retry="handleRetry"
+      @edit="handleEdit"
+      @branch="handleBranch"
+      @copy="handleCopy"
+      @cancel-edit="cancelEdit"
+      :editing-content="editingMessage?.content"
+    />
   </div>
 </template>
 
