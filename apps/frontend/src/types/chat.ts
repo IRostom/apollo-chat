@@ -13,6 +13,18 @@ export interface ChatMessageServer {
   metadata?: string
 }
 
+export interface ChatMessageMetadata {
+  total_duration?: number
+  load_duration?: number
+  prompt_eval_count?: number
+  prompt_eval_duration?: number
+  eval_count?: number
+  eval_duration?: number
+  done?: boolean
+  done_reason?: string
+  model?: string
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system' | 'tool'
   content: string
@@ -23,6 +35,7 @@ export interface ChatMessage {
   codeContent?: string
   images?: number[] | string[]
   isError?: boolean
+  metadata?: ChatMessageMetadata
 }
 
 export interface Conversation {

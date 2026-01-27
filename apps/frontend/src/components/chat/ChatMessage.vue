@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import MessageTools from './MessageTools.vue'
 import ToolMessage from './ToolMessage.vue'
+import MessageMetadata from './MessageMetadata.vue'
 
 interface Props {
   message: ChatMessage
@@ -47,9 +48,7 @@ function handleBranch() {
 </script>
 
 <template>
-  <Spinner
-    v-if="isLoading && isAssistant && !message.content.length && !message.thinking?.length"
-  />
+  <Spinner v-if="isLoading && isAssistant && !message.content.length && !message.thinking?.length" />
 
   <div v-else-if="isUser" class="flex flex-col gap-2 group">
     <div class="flex items-center justify-end gap-2">
@@ -64,18 +63,11 @@ function handleBranch() {
         </div>
       </CardContent>
     </Card>
-    <MessageTools
-      role="user"
-      class="ms-auto opacity-0 group-hover:opacity-100 transition-opacity"
-      @copy="emit('copy', message.content)"
-      @edit="emit('edit', message)"
-    />
+    <MessageTools role="user" class="ms-auto opacity-0 group-hover:opacity-100 transition-opacity"
+      @copy="emit('copy', message.content)" @edit="emit('edit', message)" />
   </div>
 
-  <div
-    v-else-if="isAssistant"
-    class="mx-auto dark:prose-invert prose lg:prose-lg prose-pre:p-0 flex flex-col group"
-  >
+  <div v-else-if="isAssistant" class="mx-auto dark:prose-invert prose lg:prose-lg prose-pre:p-0 flex flex-col group">
     <Collapsible v-if="message.thinking?.length" class="border rounded-lg" v-slot="{ open }">
       <CollapsibleTrigger class="py-2 px-3 cursor-pointer w-full text-start flex items-center">
         <div class="flex items-center gap-2">
@@ -92,10 +84,8 @@ function handleBranch() {
     <div v-html="message.content"></div>
 
     <!-- Error state with retry button -->
-    <div
-      v-if="hasError"
-      class="mt-4 flex items-center gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive"
-    >
+    <div v-if="hasError"
+      class="mt-4 flex items-center gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive">
       <AlertCircle class="h-5 w-5 shrink-0" />
       <span class="flex-1 text-sm">An error occurred while generating a response.</span>
       <Button variant="outline" size="sm" class="gap-2" @click="handleRetry">
@@ -104,14 +94,12 @@ function handleBranch() {
       </Button>
     </div>
 
-    <MessageTools
-      v-if="!hasError && !isThinking && !!message.content && message.content.trim().length > 0"
-      role="assistant"
-      class="mt-2 opacity-0 group-hover:opacity-100 transition-opacity"
-      @copy="emit('copy', message.content)"
-      @retry="handleRetry"
-      @branch="handleBranch"
-    />
+    <div v-if="!hasError && !isThinking && !!message.content && message.content.trim().length > 0"
+      class="mt-2 flex items-center gap-3">
+      <MessageTools role="assistant" class="opacity-0 group-hover:opacity-100 transition-opacity"
+        @copy="emit('copy', message.content)" @retry="handleRetry" @branch="handleBranch" />
+      <MessageMetadata :metadata="message.metadata" class="opacity-0 group-hover:opacity-100 transition-opacity" />
+    </div>
   </div>
 
   <ToolMessage v-else-if="isTool" :message="message" />
