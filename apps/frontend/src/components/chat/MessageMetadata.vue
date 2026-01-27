@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ChatMessageMetadata } from '@/types/chat'
-import { Cpu, Gauge, Timer } from 'lucide-vue-next'
+import { Bot, Cpu, Gauge, Timer } from 'lucide-vue-next'
 
 interface Props {
   metadata?: ChatMessageMetadata
@@ -20,6 +20,14 @@ const metadataItems = computed<MetadataItem[]>(() => {
   if (!meta || meta.done !== true) return []
 
   const items: MetadataItem[] = []
+
+  if (meta.model) {
+    items.push({
+      id: 'model',
+      value: meta.model,
+      icon: Bot,
+    })
+  }
 
   if (meta.eval_count && meta.eval_duration) {
     const tokensPerSecond = meta.eval_count / (meta.eval_duration / 1_000_000_000)
