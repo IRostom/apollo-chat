@@ -131,7 +131,7 @@ importers:
         specifier: ^4.7.1
         version: 4.7.1(pinia@3.0.4(typescript@5.9.3)(vue@3.5.26(typescript@5.9.3)))
       reka-ui:
-        specifier: ^2.6.1
+        specifier: ^2.7.0
         version: 2.7.0(typescript@5.9.3)(vue@3.5.26(typescript@5.9.3))
       tailwind-merge:
         specifier: ^3.4.0
