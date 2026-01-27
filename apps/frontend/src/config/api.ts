@@ -17,6 +17,7 @@ export const API_CONFIG = {
     conversations: {
       list: '/conversations',
       get: (id: string) => `/conversations/${id}`,
+      delete: (id: string) => `/conversations/${id}`,
     },
     models: {
       list: '/models',

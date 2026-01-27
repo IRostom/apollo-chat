@@ -204,6 +204,22 @@ export async function getConversations(): Promise<Conversation[]> {
 }
 
 /**
+ * Delete a conversation by ID
+ * Returns the deleted conversation id for downstream use.
+ */
+export async function deleteConversation(id: string): Promise<void> {
+  const response = await fetch(getApiUrl(API_CONFIG.endpoints.conversations.delete(id)), {
+    method: 'DELETE',
+  })
+
+  if (!response.ok) {
+    const res = await response.json().catch(() => ({ error: 'Failed to delete conversation' }))
+    throw new Error(res.error || 'Failed to delete conversation')
+  }
+
+}
+
+/**
  * Branch a conversation from a specific message
  * Creates a new conversation with messages up to the specified message
  */

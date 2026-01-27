@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Folder, MoreHorizontal, Trash2 } from 'lucide-vue-next'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { ref } from 'vue'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,6 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import ConfirmDeleteChatDialog from '@/components/ConfirmDeleteChatDialog.vue'
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -17,6 +19,8 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar'
+import { useDeleteConversation } from '@/queries/useDeleteConversation'
+import { toast } from 'vue-sonner'
 
 defineProps<{
   chats: {
@@ -27,6 +31,32 @@ defineProps<{
 
 const { isMobile } = useSidebar()
 const route = useRoute()
+const router = useRouter()
+const confirmDeleteChatId = ref<string | null>(null)
+
+const {
+  mutate: deleteConversationMutation,
+  isPending: isDeletingConversation,
+} = useDeleteConversation()
+
+function handleDeleteClick(chatId: string) {
+  confirmDeleteChatId.value = chatId
+}
+
+function handleDeleteSuccess(conversationId: string) {
+  if (route.params.id?.toString() === conversationId) {
+    router.push('/')
+  }
+  if (confirmDeleteChatId.value === conversationId) {
+    confirmDeleteChatId.value = null
+  }
+}
+
+function handleDeleteError(error: Error) {
+  toast.error('Failed to delete chat', {
+    description: error.message,
+  })
+}
 </script>
 
 <template>
@@ -46,22 +76,27 @@ const route = useRoute()
               <span class="sr-only">More</span>
             </SidebarMenuAction>
           </DropdownMenuTrigger>
-          <DropdownMenuContent
-            class="w-48 rounded-lg"
-            :side="isMobile ? 'bottom' : 'right'"
-            :align="isMobile ? 'end' : 'start'"
-          >
+          <DropdownMenuContent class="w-48 rounded-lg" :side="isMobile ? 'bottom' : 'right'"
+            :align="isMobile ? 'end' : 'start'">
             <DropdownMenuItem>
               <Folder class="text-muted-foreground" />
               <span>View Chat</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem @select.prevent="handleDeleteClick(chat.id.toString())">
               <Trash2 class="text-muted-foreground" />
               <span>Delete Chat</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <ConfirmDeleteChatDialog :open="confirmDeleteChatId === chat.id.toString()"
+          :is-deleting="isDeletingConversation"
+          @update:open="(isOpen) => (confirmDeleteChatId = isOpen ? chat.id.toString() : null)" @confirm="
+            deleteConversationMutation(chat.id.toString(), {
+              onSuccess: (_data, conversationId) => handleDeleteSuccess(conversationId),
+              onError: handleDeleteError,
+            })
+            " />
       </SidebarMenuItem>
       <!-- <SidebarMenuItem>
         <SidebarMenuButton class="text-sidebar-foreground/70">
