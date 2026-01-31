@@ -6,6 +6,7 @@ import conversationRouter from "./routes/conversation";
 import ollamaRouter from "./routes/ollamaRouter";
 import uploadRouter from "./routes/upload";
 import transcribeRouter from "./routes/transcribe";
+import settingsRouter from "./routes/settings";
 import path from "path";
 import modelsRouter from "./routes/models";
 
@@ -37,6 +38,7 @@ app.use("/", ollamaRouter);
 app.use("/", uploadRouter);
 app.use("/", transcribeRouter);
 app.use("/", modelsRouter);
+app.use("/", settingsRouter);
 // Serve static files from uploads directory
 const uploadDir = path.join(__dirname, "../uploads");
 app.use("/uploads", express.static(uploadDir));

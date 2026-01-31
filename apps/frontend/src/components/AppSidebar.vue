@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { SidebarProps } from '@/components/ui/sidebar'
 
-import { Sparkle, SquarePen } from 'lucide-vue-next'
+import { Sparkle, SquarePen, Settings } from 'lucide-vue-next'
 import NavMain from '@/components/NavMain.vue'
 import NavChats from '@/components/NavChats.vue'
 import {
@@ -36,6 +36,11 @@ const data = {
       title: 'New Chat',
       url: '/',
       icon: SquarePen,
+    },
+    {
+      title: 'Settings',
+      url: '/settings',
+      icon: Settings,
     },
   ],
 }

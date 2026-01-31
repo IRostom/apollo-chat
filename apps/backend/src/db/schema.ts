@@ -5,6 +5,7 @@ export const chatsTable = sqliteTable("conversations_table", {
   id: int().primaryKey({ autoIncrement: true }),
   title: text().notNull(),
   model: text().notNull(),
+  provider: text().notNull().default("ollama"),
   created_at: text()
     .notNull()
     .default(sql`(current_timestamp)`),
@@ -41,6 +42,16 @@ export const filesTable = sqliteTable("files_table", {
   created_at: text()
     .notNull()
     .default(sql`(current_timestamp)`),
+  updated_at: text()
+    .notNull()
+    .default(sql`(current_timestamp)`)
+    .$onUpdate(() => sql`(current_timestamp)`),
+});
+
+export const settingsTable = sqliteTable("settings_table", {
+  id: int().primaryKey({ autoIncrement: true }),
+  key: text().notNull().unique(),
+  value: text().notNull(),
   updated_at: text()
     .notNull()
     .default(sql`(current_timestamp)`)

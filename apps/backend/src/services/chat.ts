@@ -1,8 +1,19 @@
 import { db } from "../db/client";
 import { chatsTable, messagesTable } from "../db/schema";
 import { and, eq, gt, lte } from "drizzle-orm";
-import { Message } from "ollama";
 import { convertImageIdsToBase64 } from "../utils/imageUtils";
+
+/**
+ * Message format for chat history
+ */
+export interface Message {
+  role: string;
+  content: string;
+  thinking?: string;
+  tool_calls?: unknown;
+  tool_name?: string;
+  images?: string[];
+}
 
 export async function createChat(chat: typeof chatsTable.$inferInsert) {
   const [conv] = await db

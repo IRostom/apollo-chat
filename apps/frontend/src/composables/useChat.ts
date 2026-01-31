@@ -1,12 +1,11 @@
 /**
  * Chat Composable
- * Orchestration layer for chat functionality
- * Responsibility: Combine local + server history, routing, store values, markdown, file uploads
+ * Uses AI SDK's Chat class with trigger-based routing for send/retry/edit
  */
 
-import { computed, ref, watch } from 'vue'
-import { useChatStream } from '@/queries/useChatStream'
-import { useChatHistory } from '@/queries/useChatHistory'
+import { computed, ref, watch, shallowRef, onUnmounted } from 'vue'
+import { Chat } from '@ai-sdk/vue'
+import { DefaultChatTransport, type UIMessage } from 'ai'
 import { useConversationRoute } from './useConversationRoute'
 import { renderMarkdown } from './useMarkdown'
 import { useAppStore } from '@/stores/app'
@@ -15,10 +14,11 @@ import { useUploadFile } from '@/queries/upload'
 import { toast } from 'vue-sonner'
 import { useQueryClient } from '@tanstack/vue-query'
 import { branchConversation as branchConversationApi } from '@/api/chatService'
+import { useChatHistory } from '@/queries/useChatHistory'
+import { getApiUrl, API_CONFIG } from '@/config/api'
 
 /**
- * Chat state and operations
- * Combines streaming, history, routing, and file upload functionality
+ * Chat state and operations using AI SDK
  */
 export function useChat() {
   const { conversationId, navigateToConversation } = useConversationRoute()
@@ -26,169 +26,202 @@ export function useChat() {
   const { files, uploadFile, reset: resetFiles } = useUploadFile()
   const queryClient = useQueryClient()
 
-  const {
-    send: sendStreamMessage,
-    retry: retryStreamMessage,
-    stop: stopGeneration,
-    edit: editStreamMessage,
-    isStreaming,
-    isThinking,
-    newConversationId,
-    messages: localHistory,
-    resetMessages,
-  } = useChatStream(conversationId)
-
   // Track the message being edited
   const editingMessage = ref<ChatMessage | null>(null)
 
+  // Reactive state derived from Chat instance
+  const messages = shallowRef<UIMessage[]>([])
+  const status = ref<'submitted' | 'streaming' | 'ready' | 'error'>('ready')
+  const error = ref<Error | undefined>(undefined)
+
+  // Create Chat instance with transport
+  const chat = shallowRef<Chat<UIMessage> | null>(null)
+
+  function createChat() {
+    const transport = new DefaultChatTransport({
+      api: getApiUrl(API_CONFIG.endpoints.chat.api),
+      // Use prepareSendMessagesRequest to dynamically set body for each request
+      prepareSendMessagesRequest: (options) => {
+        // The options include: messages, id, body, headers, credentials, api, trigger, messageId
+        return {
+          ...options,
+          body: {
+            ...options.body,
+            // Include the messages from the options
+            messages: options.messages,
+            // Add our custom fields
+            provider: appStore.userSelectedProvider,
+            model: appStore.userSelectedModelId,
+            webTools: appStore.useWebTools,
+            trigger: options.trigger === 'regenerate-message' ? 'retry' : 'send',
+            data: {
+              conversationId: conversationId.value,
+              messageId: options.messageId,
+            },
+          },
+        }
+      },
+    })
+
+    return new Chat<UIMessage>({
+      transport,
+      onFinish: () => {
+        // Invalidate queries to refetch from server
+        queryClient.invalidateQueries({ queryKey: ['chat', conversationId.value] })
+        queryClient.invalidateQueries({ queryKey: ['chats'] })
+        syncState()
+      },
+      onError: (err) => {
+        console.error('Chat error:', err)
+        toast.error('Failed to send message', {
+          description: err.message,
+        })
+        syncState()
+      },
+    })
+  }
+
+  // Initialize chat
+  chat.value = createChat()
+
+  // Sync reactive state from Chat instance
+  function syncState() {
+    if (chat.value) {
+      messages.value = chat.value.messages
+      status.value = chat.value.status
+      error.value = chat.value.error
+    }
+  }
+
+  // Load server history for existing conversations
   const {
     data: chatHistoryServer,
     isError: isChatHistoryError,
     error: chatHistoryError,
   } = useChatHistory(conversationId)
 
-  watch(isChatHistoryError, (isChatHistoryError) => {
-    if (isChatHistoryError) {
-      console.log('chatHistoryError: ', chatHistoryError.value)
+  // Computed states
+  const isStreaming = computed(() => status.value === 'streaming' || status.value === 'submitted')
+  const isReady = computed(() => status.value === 'ready')
+
+  // Watch for chat history errors
+  watch(isChatHistoryError, (hasError) => {
+    if (hasError) {
       toast.error('Failed to fetch chat history', {
         description: chatHistoryError.value?.message,
       })
     }
   })
 
-  // Transform server history with markdown rendering
-  const chatHistoryServerWithMd = computed(() => {
-    return (chatHistoryServer.value ?? []).map((m) => ({
-      ...m,
-      content: m.role === 'assistant' ? renderMarkdown(m.content) : m.content,
-    }))
-  })
+  // Sync server history with Chat messages when conversation changes
+  watch(
+    [conversationId, chatHistoryServer],
+    ([newConvId, serverHistory]) => {
+      if (newConvId && serverHistory && serverHistory.length > 0) {
+        // Convert server messages to AI SDK format
+        const uiMessages: UIMessage[] = serverHistory.map((msg) => ({
+          id: msg.id?.toString() || `server-${Date.now()}-${Math.random()}`,
+          role: msg.role as UIMessage['role'],
+          content: msg.content,
+          parts: [{ type: 'text' as const, text: msg.content }],
+        }))
+        if (chat.value) {
+          chat.value.messages = uiMessages
+          syncState()
+        }
+      } else if (!newConvId) {
+        // Clear messages for new conversation - recreate chat
+        chat.value = createChat()
+        syncState()
+      }
+      editingMessage.value = null
+    },
+    { immediate: true },
+  )
 
-  // Transform local history with markdown rendering
-  const chatWithMd = computed(() => {
-    return localHistory.value.map((m) => ({
-      ...m,
-      content: m.role === 'assistant' ? renderMarkdown(m.content) : m.content,
-    }))
-  })
+  // Watch for model/provider changes and update transport
+  watch(
+    () => [appStore.userSelectedProvider, appStore.userSelectedModelId, appStore.useWebTools],
+    () => {
+      // Recreate chat with new transport settings
+      const currentMessages = chat.value?.messages || []
+      chat.value = createChat()
+      if (currentMessages.length > 0) {
+        chat.value.messages = currentMessages
+      }
+      syncState()
+    },
+  )
 
-  // Combined chat history (server + local) with markdown
-  const combinedChatMd = computed(() => {
-    return [...(chatHistoryServerWithMd.value ?? []), ...chatWithMd.value]
-  })
+  // Transform messages with markdown rendering for display
+  const chatMd = computed(() => {
+    return messages.value.map((msg) => {
+      // Extract text content from parts
+      let textContent = ''
+      if (msg.parts) {
+        for (const part of msg.parts) {
+          if (part.type === 'text') {
+            textContent += part.text
+          }
+        }
+      } else if (typeof msg.content === 'string') {
+        textContent = msg.content
+      }
 
-  // Navigate when a new conversation is created
-  watch(newConversationId, (id) => {
-    if (id) {
-      queryClient.invalidateQueries({ queryKey: ['chats'] })
-      navigateToConversation(id)
-    }
-  })
-
-  // Reset local messages when server history changes (conversation loaded)
-  watch(chatHistoryServer, () => {
-    resetMessages()
-    editingMessage.value = null
-  })
-
-  // Reset local messages when navigating to a new conversation
-  watch(conversationId, (id) => {
-    if (!id) {
-      resetMessages()
-    }
-    editingMessage.value = null
+      return {
+        ...msg,
+        content: msg.role === 'assistant' ? renderMarkdown(textContent) : textContent,
+        // Keep original parts for tool display
+        parts: msg.parts,
+      }
+    })
   })
 
   /**
-   * Prepare message with image transformations
-   * Creates display version (with URLs) and server version (with IDs)
-   */
-  function prepareMessageWithImages(message: ChatMessage) {
-    const currentFiles = files.value
-
-    // Message for local display (includes image URLs for rendering)
-    const displayMessage: ChatMessage = { ...message }
-    if (currentFiles.length) {
-      displayMessage.images = currentFiles.map((f) => f.path!)
-    }
-
-    // Message for server (includes image IDs for storage)
-    const serverMessage: ChatMessage = { ...message }
-    if (currentFiles.length) {
-      serverMessage.images = currentFiles.map((f) => f.id!)
-    }
-
-    return { displayMessage, serverMessage }
-  }
-
-  /**
-   * Send a message
-   * Model and options are retrieved from the store automatically
+   * Send a new message
    */
   async function sendMessage(message: ChatMessage) {
     if (!appStore.userSelectedModel) {
       throw new Error('No model selected. Please select a model before sending a message.')
     }
 
-    const { displayMessage, serverMessage } = prepareMessageWithImages(message)
+    if (!chat.value) {
+      chat.value = createChat()
+    }
 
-    await sendStreamMessage({
-      model: appStore.userSelectedModelName!,
-      displayMessage,
-      serverMessage,
-      think: appStore.canThink && appStore.shouldThink,
-      webTools: appStore.canUseWebTools && appStore.useWebTools,
-      onStreamEnd: () => {
-        console.log('onStreamEnd', conversationId.value)
-        // Invalidate the chat history query to refetch from server
-        queryClient.invalidateQueries({ queryKey: ['chat', conversationId.value] })
-      },
+    // The transport's prepareSendMessagesRequest handles adding provider, model, etc.
+    await chat.value.sendMessage({
+      text: message.content,
     })
 
+    syncState()
     resetFiles()
   }
 
   /**
-   * Attach an image file to the chat
-   */
-  function attachImageToChat(file: File) {
-    uploadFile(file)
-  }
-
-  /**
-   * Retry the last failed message
-   * Uses the server-side retry endpoint to delete old messages and regenerate
+   * Retry from a specific assistant message
    */
   async function retryMessage(assistantMessageId: number) {
     if (!appStore.userSelectedModel) {
       throw new Error('No model selected. Please select a model before retrying.')
     }
 
-    if (!conversationId.value) {
+    if (!conversationId.value || !chat.value) {
       console.error('Cannot retry without a conversation ID')
       return
     }
 
-    // Call the retry endpoint with the assistant message ID
-    await retryStreamMessage({
-      messageId: assistantMessageId,
-      model: appStore.userSelectedModelName!,
-      think: appStore.canThink && appStore.shouldThink,
-      webTools: appStore.canUseWebTools && appStore.useWebTools,
-      onStreamEnd: () => {
-        // Invalidate the chat history query to refetch from server
-        queryClient.invalidateQueries({ queryKey: ['chat', conversationId.value] })
-      },
-      onInvalidate: () => {
-        // Invalidate the chat history query to refetch from server
-        queryClient.invalidateQueries({ queryKey: ['chat', conversationId.value] })
-      },
+    // Use regenerate method with message ID
+    // The transport's prepareSendMessagesRequest handles adding provider, model, etc.
+    await chat.value.regenerate({
+      messageId: String(assistantMessageId),
     })
+
+    syncState()
   }
 
   /**
    * Start editing a user message
-   * Sets the editing state which should be used to populate the input
    */
   function editMessage(message: ChatMessage) {
     editingMessage.value = message
@@ -203,49 +236,57 @@ export function useChat() {
 
   /**
    * Submit an edited message
-   * Updates the user message and regenerates the response
    */
   async function submitEditedMessage(newContent: string) {
     if (!appStore.userSelectedModel) {
       throw new Error('No model selected. Please select a model before editing.')
     }
 
-    if (!conversationId.value) {
-      console.error('Cannot edit without a conversation ID')
-      return
-    }
-
-    if (!editingMessage.value?.id) {
-      console.error('No message being edited or message has no ID')
+    if (!conversationId.value || !editingMessage.value?.id || !chat.value) {
+      console.error('Cannot edit without conversation ID or message ID')
       return
     }
 
     const messageId = editingMessage.value.id
-
-    // Clear editing state
     editingMessage.value = null
 
-    // Call the edit endpoint
-    await editStreamMessage({
-      messageId,
-      content: newContent,
-      model: appStore.userSelectedModelName!,
-      think: appStore.canThink && appStore.shouldThink,
-      webTools: appStore.canUseWebTools && appStore.useWebTools,
-      onStreamEnd: () => {
-        // Invalidate the chat history query to refetch from server
-        queryClient.invalidateQueries({ queryKey: ['chat', conversationId.value] })
-      },
-      onInvalidate: () => {
-        // Invalidate the chat history query to refetch from server
-        queryClient.invalidateQueries({ queryKey: ['chat', conversationId.value] })
-      },
+    // Use sendMessage with messageId to replace the message
+    // The transport's prepareSendMessagesRequest handles adding provider, model, etc.
+    await chat.value.sendMessage({
+      text: newContent,
+      messageId: String(messageId),
     })
+
+    syncState()
   }
 
   /**
-   * Branch the conversation from a specific assistant message
-   * Creates a new conversation with messages up to that point
+   * Stop the current generation
+   */
+  function stopGeneration() {
+    chat.value?.stop()
+    syncState()
+  }
+
+  /**
+   * Set messages directly
+   */
+  function setMessages(newMessages: UIMessage[]) {
+    if (chat.value) {
+      chat.value.messages = newMessages
+      syncState()
+    }
+  }
+
+  /**
+   * Attach an image file to the chat
+   */
+  function attachImageToChat(file: File) {
+    uploadFile(file)
+  }
+
+  /**
+   * Branch conversation from a specific message
    */
   async function branchConversation(assistantMessageId: number) {
     if (!conversationId.value) {
@@ -255,13 +296,8 @@ export function useChat() {
 
     try {
       const result = await branchConversationApi(conversationId.value, assistantMessageId)
-
-      // Invalidate the chats list to show the new conversation
       queryClient.invalidateQueries({ queryKey: ['chats'] })
-
-      // Navigate to the new conversation
       navigateToConversation(result.conversationId)
-
       toast.success('Conversation branched successfully')
     } catch (error) {
       console.error('Failed to branch conversation:', error)
@@ -270,11 +306,17 @@ export function useChat() {
   }
 
   return {
-    chatMd: combinedChatMd,
+    // State
+    chatMd,
+    messages,
     files,
     isStreaming,
-    isThinking,
+    isReady,
+    status,
+    error,
     editingMessage,
+
+    // Actions
     sendMessage,
     stopGeneration,
     attachImageToChat,
@@ -283,5 +325,6 @@ export function useChat() {
     cancelEdit,
     submitEditedMessage,
     branchConversation,
+    setMessages,
   }
 }

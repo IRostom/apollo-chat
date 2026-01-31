@@ -1,7 +1,21 @@
 /**
  * Chat-related type definitions
+ * Uses AI SDK types where applicable
  */
 
+import type { UIMessage } from 'ai'
+
+// Re-export AI SDK types
+export type { UIMessage }
+
+/**
+ * Provider names supported by the application
+ */
+export type ProviderName = 'ollama' | 'openai' | 'google' | 'anthropic'
+
+/**
+ * Server-side message format (from database)
+ */
 export interface ChatMessageServer {
   role: 'user' | 'assistant' | 'system' | 'tool'
   content: string
@@ -13,22 +27,35 @@ export interface ChatMessageServer {
   metadata?: string
 }
 
+/**
+ * Message metadata (from AI SDK providerMetadata)
+ */
 export interface ChatMessageMetadata {
-  total_duration?: number
+  // Standard AI SDK usage
+  promptTokens?: number
+  completionTokens?: number
+  totalTokens?: number
+  // Ollama-specific metrics
+  eval_count?: number
+  eval_duration?: number
   load_duration?: number
   prompt_eval_count?: number
   prompt_eval_duration?: number
-  eval_count?: number
-  eval_duration?: number
+  tokensPerSecond?: number
+  // Common
   done?: boolean
   done_reason?: string
   model?: string
 }
 
+/**
+ * Legacy chat message format (for backward compatibility)
+ * @deprecated Use UIMessage from AI SDK instead
+ */
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system' | 'tool'
   content: string
-  id?: number
+  id?: number | string
   thinking?: string
   toolName?: string
   codeLanguage?: string
@@ -38,15 +65,44 @@ export interface ChatMessage {
   metadata?: ChatMessageMetadata
 }
 
+/**
+ * Conversation
+ */
 export interface Conversation {
   id: string
   title: string
+  provider?: ProviderName
   messages?: ChatMessage[]
   createdAt?: string
   updatedAt?: string
 }
 
+/**
+ * Model definition
+ */
 export interface Model {
+  id: string
+  name: string
+  provider: ProviderName
+  capabilities: {
+    vision: boolean
+    tools: boolean
+    streaming: boolean
+  }
+}
+
+/**
+ * Models grouped by provider
+ */
+export interface ModelsByProvider {
+  [provider: string]: Model[]
+}
+
+/**
+ * Legacy model format (for backward compatibility with Ollama)
+ * @deprecated Use Model interface instead
+ */
+export interface LegacyModel {
   name: string
   family: string
   families: string[]
@@ -59,9 +115,45 @@ export interface Model {
   context_length: number
 }
 
+/**
+ * Legacy models by family
+ * @deprecated Use ModelsByProvider instead
+ */
 export interface ModelsByFamily {
-  [key: string]: Model[]
+  [key: string]: LegacyModel[]
 }
+
+/**
+ * Chat file attachment
+ */
+export interface ChatFile {
+  file: File
+  isUploaded: boolean
+  id?: number
+  path?: string
+  isError: boolean
+}
+
+/**
+ * Chat trigger types for AI SDK
+ */
+export type ChatTrigger = 'send' | 'retry' | 'edit'
+
+/**
+ * Options for sending a message
+ */
+export interface SendMessageOptions {
+  text: string
+  files?: FileList | File[]
+  data?: {
+    trigger?: ChatTrigger
+    messageId?: string
+    content?: string
+    conversationId?: string
+  }
+}
+
+// Legacy types kept for backward compatibility during migration
 
 export type StreamFrameType =
   | 'start'
@@ -84,15 +176,6 @@ export interface StreamFrame {
   message?: string
 }
 
-export interface SendMessageOptions {
-  model: string
-  message: ChatMessage
-  conversationId?: string
-  think?: boolean
-  webTools?: boolean
-  images?: ChatFile[]
-}
-
 export interface RetryMessageOptions {
   messageId: number
   conversationId: string
@@ -108,12 +191,4 @@ export interface EditMessageOptions {
   model: string
   think?: boolean
   webTools?: boolean
-}
-
-export interface ChatFile {
-  file: File
-  isUploaded: boolean
-  id?: number
-  path?: string
-  isError: boolean
 }

@@ -1,289 +1,201 @@
 /**
- * Streaming chat response utility
- * Encapsulates the Ollama streaming loop, tool execution, and frame writing
+ * Streaming chat response utility using Vercel AI SDK
+ * Provides unified streaming across all providers (Ollama, OpenAI, Google, Anthropic)
  */
 
 import { Response } from "express";
-import { AbortableAsyncIterator, ChatResponse, Message } from "ollama";
-import { ollamaClient } from "../ollama/client";
-import {
-  webFetchTool,
-  webSearchTool,
-  webTools as availableWebTools,
-} from "../ollama/tools/web";
-import { codeTools, runCodeTool } from "../ollama/tools/code";
+import { streamText } from "ai";
+import { getModel, type ProviderName } from "../providers";
+import { getTools } from "../tools";
 import { addMessageToChat } from "../services/chat";
-import { frame } from "./frame";
+
+/**
+ * AI SDK message format - supports both content string and parts array
+ */
+export interface ChatMessage {
+  id?: string;
+  role: "user" | "assistant" | "system";
+  content?: string;
+  parts?: Array<{
+    type: string;
+    text?: string;
+    [key: string]: unknown;
+  }>;
+}
+
+/**
+ * Extract text content from a message
+ * Handles both direct content string and parts array format
+ */
+function extractContent(message: ChatMessage): string {
+  // If content is a direct string, use it
+  if (typeof message.content === "string" && message.content.length > 0) {
+    return message.content;
+  }
+
+  // If message has parts, extract text from text parts
+  if (message.parts && Array.isArray(message.parts)) {
+    const textParts = message.parts
+      .filter((part) => part.type === "text" && typeof part.text === "string")
+      .map((part) => part.text as string);
+
+    if (textParts.length > 0) {
+      return textParts.join("");
+    }
+  }
+
+  return "";
+}
 
 export interface StreamChatOptions {
   res: Response;
   conversationId: number;
+  provider: ProviderName;
   model: string;
-  chatHistory: Message[];
-  think?: boolean | "low" | "medium" | "high";
+  messages: ChatMessage[];
   webTools?: boolean;
 }
 
 /**
- * Stream a chat response from Ollama to the client
- * Handles the streaming loop, tool execution, and error recovery
- * Automatically handles client disconnection by aborting the Ollama stream
- *
- * @throws Error if streaming fails (caller should handle)
+ * Stream a chat response using AI SDK's streamText
+ * Works with all supported providers (Ollama, OpenAI, Google, Anthropic)
  */
 export async function streamChatResponse(
   options: StreamChatOptions
 ): Promise<void> {
-  const { res, conversationId, model, chatHistory, think, webTools } = options;
+  const { res, conversationId, provider, model, messages, webTools } = options;
 
-  let fullReply = "";
-  let thinkingResponse = "";
-  let ollamaResponse: AbortableAsyncIterator<ChatResponse> | null = null;
   let isAborted = false;
 
-  // Handle client disconnection (e.g., user clicked stop)
-  const handleClose = async () => {
-    if (isAborted) return; // Already handled
+  // Handle client disconnection
+  const handleClose = () => {
+    if (isAborted) return;
     isAborted = true;
-    console.log("Client disconnected, aborting stream...");
-
-    // Abort the Ollama stream
-    if (ollamaResponse) {
-      ollamaResponse.abort();
-    }
-
-    // Save partial response if any content was generated
-    if (fullReply || thinkingResponse) {
-      try {
-        await addMessageToChat({
-          conversation_id: conversationId,
-          content: fullReply ?? "",
-          role: "assistant",
-          thinking: thinkingResponse || undefined,
-          metadata: JSON.stringify({
-            done: false,
-            done_reason: "user_stopped",
-          }),
-        });
-        console.log("Partial response saved after user stop");
-      } catch (saveError) {
-        console.error("Failed to save partial response:", saveError);
-      }
-    }
+    console.log("Client disconnected, stream will be aborted...");
   };
 
-  // Register close handler
   res.on("close", handleClose);
 
   try {
-    while (true) {
-      // Check if aborted before starting new iteration
-      if (isAborted) {
-        break;
-      }
-      // ---- Stream model output ----
-      const tools = [
-        runCodeTool,
-        ...(webTools ? [webSearchTool, webFetchTool] : []),
-      ];
+    const modelInstance = getModel(provider, model);
+    const tools = getTools(webTools);
 
-      ollamaResponse = await ollamaClient.chat({
-        model,
-        messages: [...chatHistory],
-        stream: true,
-        think: think ?? false,
-        tools,
-      } as any);
+    // Convert messages to the format expected by AI SDK
+    const formattedMessages = messages.map((msg) => ({
+      role: msg.role as "user" | "assistant" | "system",
+      content: extractContent(msg),
+    }));
 
-      // Reset for each iteration (tool call loop)
-      fullReply = "";
-      thinkingResponse = "";
-      let inThinking = false;
-      let hadToolCalls = false;
-      let metadata: { [key: string]: any } = {};
-
-      console.log("Start streaming");
-      res.write(frame("role", { value: "assistant" }));
-
-      for await (const part of ollamaResponse) {
-        // Handle thinking state transitions
-        if (part.message.thinking && !inThinking) {
-          inThinking = true;
-          console.log("Thinking...\n");
-          res.write(frame("isThinking", { value: true }));
-        }
-
-        if (part.message.thinking) {
-          thinkingResponse += part.message.thinking;
-          res.write(frame("thinking", { value: part.message.thinking }));
-        }
-
-        if (part.message.content) {
-          if (inThinking) {
-            inThinking = false;
-            res.write(frame("isThinking", { value: false }));
-          }
-          const token = part.message.content;
-          fullReply += token;
-          res.write(frame("token", { value: token }));
-        }
-
-        // Handle tool calls
-        if (part.message.tool_calls && part.message.tool_calls.length > 0) {
-          if (inThinking) {
-            inThinking = false;
-            res.write(frame("isThinking", { value: false }));
-          }
-
-          hadToolCalls = true;
-          const assistantMessage = {
-            role: "assistant",
-            content: fullReply,
-            thinking: thinkingResponse,
-          };
-
-          chatHistory.push({
-            ...assistantMessage,
-            tool_calls: part.message.tool_calls,
-          });
-
-          await addMessageToChat({
-            ...assistantMessage,
-            conversation_id: conversationId,
-            tool_calls: JSON.stringify(part.message.tool_calls),
-            metadata: JSON.stringify(metadata),
-          });
-
-          // Execute tools and append tool results
-          for (const toolCall of part.message.tool_calls) {
-            const availableTools = {
-              ...(webTools ? availableWebTools : {}),
-              ...codeTools,
-            };
-            const functionToCall =
-              availableTools[
-                toolCall.function.name as keyof typeof availableTools
-              ];
-
-            if (functionToCall) {
-              const args = toolCall.function.arguments as any;
-              console.log(
-                "\nCalling function:",
-                toolCall.function.name,
-                "with arguments:",
-                args
-              );
-
-              const output = await functionToCall(args);
-
-              res.write(frame("role", { value: "tool" }));
-              res.write(frame("toolName", { value: toolCall.function.name }));
-              if (toolCall.function.name === "runCode") {
-                if (typeof args?.language === "string") {
-                  res.write(frame("codeLanguage", { value: args.language }));
-                }
-                if (typeof args?.code === "string") {
-                  res.write(frame("codeContent", { value: args.code }));
-                }
-              }
-              res.write(frame("toolValue", { value: JSON.stringify(output) }));
-
-              console.log(toolCall.function.name, "returned result", "\n");
-
-              const toolMessage = {
-                role: "tool",
-                content: JSON.stringify(output),
-              };
-
-              chatHistory.push({
-                ...toolMessage,
-                tool_name: toolCall.function.name,
-              });
-
-              await addMessageToChat({
-                ...toolMessage,
-                conversation_id: conversationId,
-                tool_name: toolCall.function.name.toString(),
-                tool_calls: undefined,
-              });
-            }
-          }
-        }
-
-        // Capture metadata when done
-        if (part.done) {
-          metadata = {
-            total_duration: part.total_duration,
-            load_duration: part.load_duration,
-            prompt_eval_count: part.prompt_eval_count,
-            prompt_eval_duration: part.prompt_eval_duration,
-            eval_count: part.eval_count,
-            eval_duration: part.eval_duration,
-            done: part.done,
-            done_reason: part.done_reason,
-            model: part.model,
-          };
-        }
-      }
-
-      // If no tool calls, we're done streaming
-      if (!hadToolCalls) {
-        // Check if aborted before saving
+    const result = streamText({
+      model: modelInstance,
+      messages: formattedMessages,
+      tools,
+      onFinish: async ({ text, usage, providerMetadata, toolCalls }) => {
         if (isAborted) {
-          break;
+          console.log("Stream was aborted, saving partial response...");
         }
 
-        console.log("Streaming about to end...");
-        // Persist assistant reply
+        // Build metadata from usage and provider-specific data
+        const metadata: Record<string, unknown> = {
+          done: !isAborted,
+          done_reason: isAborted ? "user_stopped" : "complete",
+        };
+
+        // Add usage info if available
+        if (usage) {
+          const usageData = usage as Record<string, unknown>;
+          metadata.promptTokens = usageData.promptTokens;
+          metadata.completionTokens = usageData.completionTokens;
+          metadata.totalTokens = usageData.totalTokens;
+        }
+
+        // Include Ollama-specific metrics if available
+        if (provider === "ollama" && providerMetadata?.ollama) {
+          const ollamaMetrics = providerMetadata.ollama as Record<string, unknown>;
+          metadata.eval_count = ollamaMetrics.eval_count;
+          metadata.eval_duration = ollamaMetrics.eval_duration;
+          metadata.load_duration = ollamaMetrics.load_duration;
+          metadata.prompt_eval_count = ollamaMetrics.prompt_eval_count;
+          metadata.prompt_eval_duration = ollamaMetrics.prompt_eval_duration;
+          metadata.model = model;
+
+          // Calculate tokens per second for Ollama
+          if (
+            typeof ollamaMetrics.eval_count === "number" &&
+            typeof ollamaMetrics.eval_duration === "number" &&
+            ollamaMetrics.eval_duration > 0
+          ) {
+            metadata.tokensPerSecond =
+              ollamaMetrics.eval_count /
+              (ollamaMetrics.eval_duration / 1_000_000_000);
+          }
+        }
+
+        // Persist the assistant message
         await addMessageToChat({
           conversation_id: conversationId,
-          content: fullReply,
+          content: text || "",
           role: "assistant",
-          thinking: thinkingResponse,
+          tool_calls: toolCalls ? JSON.stringify(toolCalls) : undefined,
           metadata: JSON.stringify(metadata),
         });
 
-        res.write(frame("end"));
-        res.end();
-        break;
-      }
-      // Otherwise, loop continues with tool results added to history
-    }
-  } catch (err) {
-    // If aborted by user, the close handler already saved partial response
-    if (isAborted) {
-      console.log("Stream aborted by user");
-      return;
-    }
-
-    console.error(err);
-
-    // Abort ongoing Ollama stream to free resources
-    if (ollamaResponse) {
-      ollamaResponse.abort();
-    }
-
-    // Save partial response to DB before ending
-    await addMessageToChat({
-      conversation_id: conversationId,
-      content: fullReply ?? "",
-      role: "assistant",
-      thinking: thinkingResponse || undefined,
-      metadata: JSON.stringify({
-        done: false,
-        done_reason: "server_error",
-      }),
+        console.log("Assistant message persisted to database");
+      },
     });
 
-    // Write error frame to stream and end it
-    res.write(
-      frame("error", {
-        message: err instanceof Error ? err.message : "Internal server error",
-      })
-    );
-    res.end();
+    // Pipe the AI SDK stream response to the Express response
+    result.pipeTextStreamToResponse(res);
+  } catch (err) {
+    console.error("Stream error:", err);
+
+    // If headers haven't been sent, send error response
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : "Internal server error",
+      });
+    }
   } finally {
-    // Clean up the close handler
     res.off("close", handleClose);
   }
+}
+
+/**
+ * Process messages for retry - removes messages after the specified message ID
+ */
+export function processMessagesForRetry(
+  messages: ChatMessage[],
+  messageId: string
+): ChatMessage[] {
+  const index = messages.findIndex((m) => m.id === messageId);
+  if (index === -1) {
+    return messages;
+  }
+  // Return messages up to but not including the message to retry from
+  return messages.slice(0, index);
+}
+
+/**
+ * Process messages for edit - updates content and removes subsequent messages
+ */
+export function processMessagesForEdit(
+  messages: ChatMessage[],
+  messageId: string,
+  newContent: string
+): ChatMessage[] {
+  const index = messages.findIndex((m) => m.id === messageId);
+  if (index === -1) {
+    return messages;
+  }
+
+  // Keep messages up to and including the edited message
+  const processedMessages = messages.slice(0, index + 1);
+
+  // Update the content of the edited message
+  processedMessages[index] = {
+    ...processedMessages[index],
+    content: newContent,
+  };
+
+  return processedMessages;
 }

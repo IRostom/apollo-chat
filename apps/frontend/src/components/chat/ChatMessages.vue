@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import ChatMessage from './ChatMessage.vue'
-import type { ChatMessage as ChatMessageType } from '@/types/chat'
+import type { ChatMessage as ChatMessageType, UIMessage } from '@/types/chat'
+
+// Accept both AI SDK UIMessage and legacy ChatMessage formats
+type MessageType = (UIMessage & { metadata?: ChatMessageType['metadata'] }) | ChatMessageType
 
 interface Props {
-  messages: Array<ChatMessageType>
+  messages: Array<MessageType>
   isStreaming?: boolean
-  isThinking?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -13,14 +15,21 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
-  retry: [assistantMessageId: number]
-  edit: [message: ChatMessageType]
-  branch: [assistantMessageId: number]
+  retry: [assistantMessageId: number | string]
+  edit: [message: MessageType]
+  branch: [assistantMessageId: number | string]
   copy: [content: string]
 }>()
 
 function isLastMessage(index: number) {
   return index === props.messages.length - 1
+}
+
+function getMessageKey(msg: MessageType, index: number): string | number {
+  if ('id' in msg && msg.id !== undefined) {
+    return msg.id
+  }
+  return index
 }
 </script>
 
@@ -28,7 +37,7 @@ function isLastMessage(index: number) {
   <div class="flex flex-col">
     <article
       v-for="(msg, index) in messages"
-      :key="msg.id ?? index"
+      :key="getMessageKey(msg, index)"
       class="px-16"
       :class="{ 'pt-12 pb-12': msg.role === 'user', 'pb-12': msg.role !== 'user' }"
     >
@@ -36,7 +45,6 @@ function isLastMessage(index: number) {
         <ChatMessage
           :message="msg"
           :is-loading="isStreaming && isLastMessage(index)"
-          :is-thinking="isThinking && isLastMessage(index)"
           @retry="emit('retry', $event)"
           @edit="emit('edit', $event)"
           @branch="emit('branch', $event)"

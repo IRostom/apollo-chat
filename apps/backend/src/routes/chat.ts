@@ -7,170 +7,232 @@ import {
   getChatHistory,
   getMessageById,
   deleteMessagesAfterUserMessage,
-  loadChatHistory,
   updateMessageContent,
   getMessagesUpTo,
   copyMessagesToConversation,
 } from "../services/chat";
-import { Message } from "ollama";
-import { frame } from "../utils/frame";
-import { convertImageIdsToBase64 } from "../utils/imageUtils";
-import { PingOllama } from "../services/ollamaService";
-import { streamChatResponse } from "../utils/streamChat";
+import { type ProviderName } from "../providers";
+import {
+  streamChatResponse,
+  processMessagesForRetry,
+  processMessagesForEdit,
+  type ChatMessage,
+} from "../utils/streamChat";
 
 const router = Router();
 
-const chatValidation = [
-  body("model").isString().notEmpty(),
-  body("message").isObject(),
-  body("message.role").isString().notEmpty(),
-  body("message.content").isString().notEmpty(),
-  body("message.images").optional().isArray(),
-  body("message.images.*").isInt({ min: 1 }),
-  body("conversationId").optional().isString(),
-  body("think")
-    .optional()
-    .custom(
-      (value) =>
-        typeof value === "boolean" || ["low", "medium", "high"].includes(value)
-    ),
-  body("webTools").optional().isBoolean(),
-];
+/**
+ * AI SDK message format - messages can have parts array or content string
+ */
+interface AISDKMessage {
+  id?: string;
+  role: "user" | "assistant" | "system";
+  content?: string;
+  parts?: Array<{
+    type: string;
+    text?: string;
+    [key: string]: unknown;
+  }>;
+}
 
-const retryValidation = [
-  body("messageId").isInt({ min: 1 }),
-  body("conversationId").isString().notEmpty(),
-  body("model").isString().notEmpty(),
-  body("think")
-    .optional()
-    .custom(
-      (value) =>
-        typeof value === "boolean" || ["low", "medium", "high"].includes(value)
-    ),
-  body("webTools").optional().isBoolean(),
-];
+/**
+ * Extract text content from an AI SDK message
+ * Handles both direct content string and parts array format
+ */
+function extractMessageContent(message: AISDKMessage): string {
+  // If content is a direct string, use it
+  if (typeof message.content === "string" && message.content.length > 0) {
+    return message.content;
+  }
 
-const editValidation = [
-  body("messageId").isInt({ min: 1 }),
-  body("conversationId").isString().notEmpty(),
-  body("content").isString().notEmpty(),
-  body("model").isString().notEmpty(),
-  body("think")
-    .optional()
-    .custom(
-      (value) =>
-        typeof value === "boolean" || ["low", "medium", "high"].includes(value)
-    ),
-  body("webTools").optional().isBoolean(),
-];
+  // If message has parts, extract text from text parts
+  if (message.parts && Array.isArray(message.parts)) {
+    const textParts = message.parts
+      .filter((part) => part.type === "text" && typeof part.text === "string")
+      .map((part) => part.text as string);
 
-const branchValidation = [
-  body("messageId").isInt({ min: 1 }),
-  body("conversationId").isString().notEmpty(),
+    if (textParts.length > 0) {
+      return textParts.join("");
+    }
+  }
+
+  return "";
+}
+
+/**
+ * Trigger types for chat actions
+ * Supports both our custom triggers and AI SDK's default triggers
+ */
+type ChatTrigger = "send" | "retry" | "edit" | "submit-message" | "regenerate-message";
+
+interface ChatRequestBody {
+  messages: ChatMessage[];
+  provider: ProviderName;
+  model: string;
+  trigger?: ChatTrigger;
+  data?: {
+    messageId?: string;
+    content?: string;
+    conversationId?: string;
+  };
+  webTools?: boolean;
+}
+
+/**
+ * Normalize AI SDK triggers to our internal triggers
+ */
+function normalizeTrigger(trigger?: ChatTrigger): "send" | "retry" | "edit" {
+  switch (trigger) {
+    case "submit-message":
+    case "send":
+      return "send";
+    case "regenerate-message":
+    case "retry":
+      return "retry";
+    case "edit":
+      return "edit";
+    default:
+      return "send";
+  }
+}
+
+/**
+ * POST /api/chat
+ * Main chat endpoint with trigger-based routing
+ * Supports: send (new message), retry (regenerate), edit (update and regenerate)
+ * Also supports AI SDK triggers: submit-message, regenerate-message
+ */
+const apiChatValidation = [
+  body("messages").isArray(),
+  body("provider").isString().notEmpty(),
+  body("model").isString().notEmpty(),
+  body("trigger").optional().isIn(["send", "retry", "edit", "submit-message", "regenerate-message"]),
+  body("data").optional().isObject(),
+  body("webTools").optional().isBoolean(),
 ];
 
 router.post(
-  "/chat/stream",
-  chatValidation,
+  "/api/chat",
+  apiChatValidation,
   async (req: Request, res: Response) => {
+    // Debug logging to see what's being received
+    console.log("Chat API received body:", JSON.stringify(req.body, null, 2));
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log("Validation errors:", JSON.stringify(errors.array(), null, 2));
       return res.status(400).json({ errors: errors.array() });
     }
 
     const {
+      messages,
+      provider,
       model,
-      message: clientMessage,
-      conversationId,
-      think,
+      trigger: rawTrigger,
+      data,
       webTools,
-    } = req.body as {
-      model: string;
-      message: { role: string; content: string; images?: string[] };
-      conversationId?: string;
-      think?: boolean | "low" | "medium" | "high";
-      webTools?: boolean;
-    };
+    } = req.body as ChatRequestBody;
 
-    const ollamaPing = await PingOllama();
-    if (!ollamaPing) {
-      return res.status(500).json({ error: "Could not connect to OLLAMA" });
-    }
+    // Normalize AI SDK triggers to our internal triggers
+    const trigger = normalizeTrigger(rawTrigger);
 
-    // ---- Headers for streaming ----
-    res.setHeader("Content-Type", "application/x-ndjson");
-    res.setHeader("Transfer-Encoding", "chunked");
-
-    let convId = conversationId;
+    let processedMessages = messages;
+    let conversationId = data?.conversationId
+      ? parseInt(data.conversationId, 10)
+      : undefined;
 
     try {
-      // ---- Send start frame ----
-      res.write(frame("start"));
+      // Handle different triggers
+      switch (trigger) {
+        case "retry": {
+          if (!data?.messageId) {
+            return res
+              .status(400)
+              .json({ error: "messageId required for retry" });
+          }
+          processedMessages = processMessagesForRetry(messages, data.messageId);
 
-      // ---- Create / resolve conversation ----
-      if (!convId) {
-        const chatRes = await createChat({
-          title: clientMessage.content.slice(0, 20),
-          model,
-        });
-        convId = chatRes.toString();
-        console.log("new chat created", convId, clientMessage.content);
-        // res.write(frame("conversationId", { value: convId }));
+          // Delete messages from database
+          if (conversationId) {
+            const messageIdNum = parseInt(data.messageId, 10);
+            await deleteMessagesAfterUserMessage(conversationId, messageIdNum);
+          }
+          break;
+        }
+
+        case "edit": {
+          if (!data?.messageId || !data?.content) {
+            return res
+              .status(400)
+              .json({ error: "messageId and content required for edit" });
+          }
+          processedMessages = processMessagesForEdit(
+            messages,
+            data.messageId,
+            data.content
+          );
+
+          // Update message in database and delete subsequent
+          if (conversationId) {
+            const messageIdNum = parseInt(data.messageId, 10);
+            await updateMessageContent(
+              messageIdNum,
+              conversationId,
+              data.content
+            );
+            await deleteMessagesAfterUserMessage(conversationId, messageIdNum);
+          }
+          break;
+        }
+
+        case "send":
+        default: {
+          // Create conversation if needed
+          if (!conversationId && processedMessages.length > 0) {
+            const firstMessage = processedMessages[0] as AISDKMessage;
+            const content = extractMessageContent(firstMessage);
+            const title = content.slice(0, 20) || "New conversation";
+
+            conversationId = await createChat({
+              title,
+              model,
+              provider,
+            });
+            console.log("New conversation created:", conversationId);
+          }
+
+          // Persist the user message (last message in the array)
+          if (conversationId && processedMessages.length > 0) {
+            const lastMessage = processedMessages[
+              processedMessages.length - 1
+            ] as AISDKMessage;
+            if (lastMessage.role === "user") {
+              const content = extractMessageContent(lastMessage);
+              if (content) {
+                await addMessageToChat({
+                  conversation_id: conversationId,
+                  content,
+                  role: "user",
+                });
+              }
+            }
+          }
+          break;
+        }
       }
 
-      // ---- Load history ----
-      const chatHistory: Message[] = conversationId
-        ? await loadChatHistory(+conversationId)
-        : [];
-
-      // ---- Process and persist user message ----
-      console.log("Persisting user message...");
-
-      let clientImagesBase64;
-      if (clientMessage.images && clientMessage.images.length) {
-        clientImagesBase64 = await convertImageIdsToBase64(
-          clientMessage.images
-        );
-      }
-
-      const userMessage = {
-        role: clientMessage.role,
-        content: clientMessage.content,
-      };
-
-      chatHistory.push({ ...userMessage, images: clientImagesBase64 });
-
-      await addMessageToChat({
-        ...userMessage,
-        conversation_id: +convId,
-        images: clientMessage.images?.toString(),
-      });
-
-      if (!conversationId && convId) {
-        res.write(frame("conversationId", { value: convId }));
-      }
-
-      // ---- Stream the response ----
+      // Stream the response
       await streamChatResponse({
         res,
-        conversationId: +convId,
+        conversationId: conversationId || 0,
+        provider,
         model,
-        chatHistory,
-        think,
+        messages: processedMessages,
         webTools,
       });
     } catch (err) {
-      console.error(err);
-
-      if (res.headersSent) {
-        res.write(
-          frame("error", {
-            message:
-              err instanceof Error ? err.message : "Internal server error",
-          })
-        );
-        res.end();
-      } else {
+      console.error("Chat API error:", err);
+      if (!res.headersSent) {
         res.status(500).json({
           error: err instanceof Error ? err.message : "Internal server error",
         });
@@ -179,188 +241,14 @@ router.post(
   }
 );
 
-router.post(
-  "/chat/stream/retry",
-  retryValidation,
-  async (req: Request, res: Response) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { messageId, conversationId, model, think, webTools } = req.body as {
-      messageId: number;
-      conversationId: string;
-      model: string;
-      think?: boolean | "low" | "medium" | "high";
-      webTools?: boolean;
-    };
-
-    // Validate assistant message exists and belongs to the conversation
-    const assistantMessage = await getMessageById(messageId, +conversationId);
-    if (!assistantMessage) {
-      return res.status(404).json({ error: "Message not found" });
-    }
-    if (assistantMessage.role !== "assistant") {
-      return res
-        .status(400)
-        .json({ error: "Message is not an assistant message" });
-    }
-
-    const ollamaPing = await PingOllama();
-    if (!ollamaPing) {
-      return res.status(500).json({ error: "Could not connect to OLLAMA" });
-    }
-
-    // Find the user message before the assistant message
-    const allMessages = await getChatHistory(+conversationId);
-    const assistantIndex = allMessages.findIndex((m) => m.id === messageId);
-    if (assistantIndex === -1) {
-      return res.status(404).json({ error: "Message not found in history" });
-    }
-
-    // Find the user message immediately before the assistant message
-    let userMessage = null;
-    for (let i = assistantIndex - 1; i >= 0; i--) {
-      if (allMessages[i].role === "user") {
-        userMessage = allMessages[i];
-        break;
-      }
-    }
-
-    if (!userMessage || !userMessage.id) {
-      return res
-        .status(400)
-        .json({ error: "No user message found before assistant message" });
-    }
-
-    // ---- Headers for streaming ----
-    res.setHeader("Content-Type", "application/x-ndjson");
-    res.setHeader("Transfer-Encoding", "chunked");
-
-    try {
-      // ---- Send start frame ----
-      res.write(frame("start"));
-
-      // Delete all messages after the user message
-      await deleteMessagesAfterUserMessage(+conversationId, userMessage.id);
-
-      // Send invalidate frame to signal frontend to refresh cache
-      res.write(frame("invalidate"));
-
-      // ---- Load remaining history ----
-      const chatHistory = await loadChatHistory(+conversationId);
-
-      // ---- Stream the response ----
-      await streamChatResponse({
-        res,
-        conversationId: +conversationId,
-        model,
-        chatHistory,
-        think,
-        webTools,
-      });
-    } catch (err) {
-      console.error(err);
-
-      if (res.headersSent) {
-        res.write(
-          frame("error", {
-            message:
-              err instanceof Error ? err.message : "Internal server error",
-          })
-        );
-        res.end();
-      } else {
-        res.status(500).json({
-          error: err instanceof Error ? err.message : "Internal server error",
-        });
-      }
-    }
-  }
-);
-
-router.post(
-  "/chat/stream/edit",
-  editValidation,
-  async (req: Request, res: Response) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    const { messageId, conversationId, content, model, think, webTools } =
-      req.body as {
-        messageId: number;
-        conversationId: string;
-        content: string;
-        model: string;
-        think?: boolean | "low" | "medium" | "high";
-        webTools?: boolean;
-      };
-
-    // Validate user message exists and belongs to the conversation
-    const userMessage = await getMessageById(messageId, +conversationId);
-    if (!userMessage) {
-      return res.status(404).json({ error: "Message not found" });
-    }
-    if (userMessage.role !== "user") {
-      return res.status(400).json({ error: "Message is not a user message" });
-    }
-
-    const ollamaPing = await PingOllama();
-    if (!ollamaPing) {
-      return res.status(500).json({ error: "Could not connect to OLLAMA" });
-    }
-
-    // ---- Headers for streaming ----
-    res.setHeader("Content-Type", "application/x-ndjson");
-    res.setHeader("Transfer-Encoding", "chunked");
-
-    try {
-      // ---- Send start frame ----
-      res.write(frame("start"));
-
-      // Update the user message content
-      await updateMessageContent(messageId, +conversationId, content);
-
-      // Delete all messages after the user message
-      await deleteMessagesAfterUserMessage(+conversationId, messageId);
-
-      // Send invalidate frame to signal frontend to refresh cache
-      res.write(frame("invalidate"));
-
-      // ---- Load remaining history ----
-      const chatHistory = await loadChatHistory(+conversationId);
-
-      // ---- Stream the response ----
-      await streamChatResponse({
-        res,
-        conversationId: +conversationId,
-        model,
-        chatHistory,
-        think,
-        webTools,
-      });
-    } catch (err) {
-      console.error(err);
-
-      if (res.headersSent) {
-        res.write(
-          frame("error", {
-            message:
-              err instanceof Error ? err.message : "Internal server error",
-          })
-        );
-        res.end();
-      } else {
-        res.status(500).json({
-          error: err instanceof Error ? err.message : "Internal server error",
-        });
-      }
-    }
-  }
-);
+/**
+ * POST /chat/branch
+ * Branch a conversation from a specific message
+ */
+const branchValidation = [
+  body("messageId").isInt({ min: 1 }),
+  body("conversationId").isString().notEmpty(),
+];
 
 router.post(
   "/chat/branch",
@@ -395,16 +283,19 @@ router.post(
         ? firstUserMessage.content.slice(0, 20)
         : "Branched conversation";
 
-      // Get the model from the original conversation
+      // Get the model and provider from the original conversation
       const originalChat = await getChatById(+conversationId);
       if (!originalChat) {
-        return res.status(404).json({ error: "Original conversation not found" });
+        return res
+          .status(404)
+          .json({ error: "Original conversation not found" });
       }
 
       // Create the new conversation
       const newConversationId = await createChat({
         title: `${title} (branch)`,
         model: originalChat.model,
+        provider: (originalChat as { provider?: string }).provider || "ollama",
       });
 
       // Copy the messages to the new conversation
@@ -416,6 +307,109 @@ router.post(
       return res.status(500).json({
         error: err instanceof Error ? err.message : "Internal server error",
       });
+    }
+  }
+);
+
+// ============================================================================
+// Legacy endpoints (kept for backward compatibility during migration)
+// These can be removed once frontend is fully migrated to AI SDK
+// ============================================================================
+
+import { convertImageIdsToBase64 } from "../utils/imageUtils";
+
+const legacyChatValidation = [
+  body("model").isString().notEmpty(),
+  body("message").isObject(),
+  body("message.role").isString().notEmpty(),
+  body("message.content").isString().notEmpty(),
+  body("message.images").optional().isArray(),
+  body("message.images.*").isInt({ min: 1 }),
+  body("conversationId").optional().isString(),
+  body("provider").optional().isString(),
+  body("webTools").optional().isBoolean(),
+];
+
+/**
+ * @deprecated Use POST /api/chat instead
+ * Legacy chat endpoint for backward compatibility
+ */
+router.post(
+  "/chat/stream",
+  legacyChatValidation,
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const {
+      model,
+      message: clientMessage,
+      conversationId,
+      provider = "ollama",
+      webTools,
+    } = req.body as {
+      model: string;
+      message: { role: string; content: string; images?: string[] };
+      conversationId?: string;
+      provider?: ProviderName;
+      webTools?: boolean;
+    };
+
+    let convId = conversationId ? parseInt(conversationId, 10) : undefined;
+
+    try {
+      // Create conversation if needed
+      if (!convId) {
+        convId = await createChat({
+          title: clientMessage.content.slice(0, 20),
+          model,
+          provider,
+        });
+        console.log("New conversation created:", convId);
+      }
+
+      // Process images if present
+      let imageData: string[] | undefined;
+      if (clientMessage.images && clientMessage.images.length) {
+        imageData = await convertImageIdsToBase64(clientMessage.images);
+      }
+
+      // Persist user message
+      await addMessageToChat({
+        conversation_id: convId,
+        content: clientMessage.content,
+        role: clientMessage.role,
+        images: clientMessage.images?.toString(),
+      });
+
+      // Load conversation history
+      const historyMessages = await getChatHistory(convId);
+
+      // Convert to ChatMessage format
+      const chatMessages: ChatMessage[] = historyMessages.map((msg, index) => ({
+        id: msg.id?.toString() || `msg-${index}`,
+        role: msg.role as ChatMessage["role"],
+        content: msg.content,
+      }));
+
+      // Stream the response
+      await streamChatResponse({
+        res,
+        conversationId: convId,
+        provider,
+        model,
+        messages: chatMessages,
+        webTools,
+      });
+    } catch (err) {
+      console.error("Legacy chat error:", err);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: err instanceof Error ? err.message : "Internal server error",
+        });
+      }
     }
   }
 );

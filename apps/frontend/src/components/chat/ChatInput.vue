@@ -3,7 +3,6 @@ import {
   ArrowUpIcon,
   PlusIcon,
   ChevronDown,
-  Brain,
   Globe,
   Image,
   Mic,
@@ -31,7 +30,7 @@ import { Toggle } from '@/components/ui/toggle'
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useModels } from '@/queries/models'
-import type { ChatFile, Model } from '@/types/chat'
+import type { ChatFile, Model, ProviderName } from '@/types/chat'
 import { useRecordAndTranscribe } from '@/composables/useRecordAndTranscribe'
 import Spinner from '../ui/spinner/Spinner.vue'
 import { toast } from 'vue-sonner'
@@ -56,17 +55,27 @@ const emit = defineEmits<{
 const isEditing = computed(() => props.editingContent !== undefined)
 
 const appStore = useAppStore()
-// TODO:
-const { data: modelsByFamily, isError: isModelsError, error: modelsError } = useModels()
-const modelFamilies = computed(() => Object.keys(modelsByFamily.value ?? {}))
+const { data: modelsByProvider, isError: isModelsError, error: modelsError } = useModels()
+
+// Get list of providers that have models
+const providers = computed(() => Object.keys(modelsByProvider.value ?? {}) as ProviderName[])
+
+// Provider display names
+const providerLabels: Record<ProviderName, string> = {
+  ollama: 'Ollama',
+  openai: 'OpenAI',
+  google: 'Google',
+  anthropic: 'Anthropic',
+}
+
 const { startRecording, stopRecordingAndTranscribe, isRecording, isTranscribing, canRecord } =
   useRecordAndTranscribe((result) => {
     console.log('transcribe result: ', result)
     userMsg.value = result
   })
 
-watch(isModelsError, (isModelsError) => {
-  if (isModelsError) {
+watch(isModelsError, (hasError) => {
+  if (hasError) {
     console.log('modelsError: ', modelsError.value?.message)
     toast.error('Failed to fetch models', {
       description: modelsError.value?.message,
@@ -89,8 +98,7 @@ watch(
 
 const userMsg = ref('')
 const userSelectedModelName = computed(() => appStore.userSelectedModelName)
-const canThink = computed(() => appStore.canThink)
-const canUseWebTools = computed(() => appStore.canUseWebTools)
+const canUseTools = computed(() => appStore.canUseTools)
 const supportsVision = computed(() => appStore.supportsVision)
 
 function send() {
@@ -120,10 +128,6 @@ function onEnterKey(e: KeyboardEvent) {
 function updateSelectedModel(model: Model) {
   appStore.updateUserSelectedModel(model)
 }
-
-// function updateSelectedModelFamily(family: string) {
-//   appStore.updateUserSelectedModelFamily(family)
-// }
 
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
@@ -222,18 +226,8 @@ onUnmounted(() => {
         />
         <Toggle
           size="sm"
-          :modelValue="appStore.shouldThink"
-          :disabled="!canThink"
-          @update:modelValue="appStore.updateShouldThink"
-          aria-label="Toggle think"
-        >
-          <Brain class="h-4 w-4" />
-          Think
-        </Toggle>
-        <Toggle
-          size="sm"
           :modelValue="appStore.useWebTools"
-          :disabled="!canUseWebTools"
+          :disabled="!canUseTools"
           @update:modelValue="appStore.updateUseWebTools"
           aria-label="Toggle web search"
         >
@@ -249,27 +243,30 @@ onUnmounted(() => {
               </InputGroupButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="start" class="[--radius:0.95rem]">
-              <DropdownMenuSub v-for="family in modelFamilies" :key="family">
-                <DropdownMenuSubTrigger class="capitalize">{{ family }}</DropdownMenuSubTrigger>
+              <DropdownMenuSub v-for="provider in providers" :key="provider">
+                <DropdownMenuSubTrigger class="capitalize">{{
+                  providerLabels[provider] || provider
+                }}</DropdownMenuSubTrigger>
                 <DropdownMenuPortal>
                   <DropdownMenuSubContent>
                     <DropdownMenuItem
-                      v-for="model in modelsByFamily?.[family] ?? []"
-                      :key="model.name"
+                      v-for="model in modelsByProvider?.[provider] ?? []"
+                      :key="model.id"
                       @click="updateSelectedModel(model)"
                       class="capitalize"
-                      >{{ model.name }}
-                      <div v-if="model.vision" class="border border-yellow-300 rounded py-0.5 px-1">
+                    >
+                      {{ model.name }}
+                      <div
+                        v-if="model.capabilities?.vision"
+                        class="border border-yellow-300 rounded py-0.5 px-1"
+                      >
                         <Eye class="size-4 text-yellow-300" />
                       </div>
-                      <div v-if="model.tools" class="border border-blue-300 rounded py-0.5 px-1">
-                        <Hammer class="size-4 text-blue-300" />
-                      </div>
                       <div
-                        v-if="model.thinking"
-                        class="border border-green-300 rounded py-0.5 px-1"
+                        v-if="model.capabilities?.tools"
+                        class="border border-blue-300 rounded py-0.5 px-1"
                       >
-                        <Brain class="size-4 text-green-300" />
+                        <Hammer class="size-4 text-blue-300" />
                       </div>
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>

@@ -9,7 +9,6 @@ import { toast } from 'vue-sonner'
 const {
   chatMd,
   isStreaming,
-  isThinking,
   sendMessage,
   stopGeneration,
   files,
@@ -39,8 +38,11 @@ async function handleSend(message: string) {
   await sendMessage(userMessage)
 }
 
-async function handleRetry(assistantMessageId: number) {
-  await retryMessage(assistantMessageId)
+async function handleRetry(assistantMessageId: number | string) {
+  const id = typeof assistantMessageId === 'string' ? parseInt(assistantMessageId, 10) : assistantMessageId
+  if (!isNaN(id)) {
+    await retryMessage(id)
+  }
 }
 
 function handleStop() {
@@ -60,8 +62,11 @@ async function handleEdit(message: ChatMessage) {
   editMessage(message)
 }
 
-async function handleBranch(assistantMessageId: number) {
-  await branchConversation(assistantMessageId)
+async function handleBranch(assistantMessageId: number | string) {
+  const id = typeof assistantMessageId === 'string' ? parseInt(assistantMessageId, 10) : assistantMessageId
+  if (!isNaN(id)) {
+    await branchConversation(id)
+  }
 }
 </script>
 
@@ -71,14 +76,25 @@ async function handleBranch(assistantMessageId: number) {
       <div class="max-w-3xl w-full flex flex-col items-center gap-8">
         <p class="text-2xl text-muted-foreground">How can I help you today?</p>
         <div class="w-full">
-          <ChatInput :files :is-streaming="isStreaming" @send="handleSend" @attach="attachImageToChat"
-            @stop="handleStop" />
+          <ChatInput
+            :files
+            :is-streaming="isStreaming"
+            @send="handleSend"
+            @attach="attachImageToChat"
+            @stop="handleStop"
+          />
         </div>
       </div>
     </div>
     <div v-else class="flex-1 overflow-auto">
-      <ChatMessages :messages="chatMd" :is-streaming="isStreaming" :is-thinking="isThinking" @retry="handleRetry"
-        @edit="handleEdit" @branch="handleBranch" @copy="handleCopy" />
+      <ChatMessages
+        :messages="chatMd"
+        :is-streaming="isStreaming"
+        @retry="handleRetry"
+        @edit="handleEdit"
+        @branch="handleBranch"
+        @copy="handleCopy"
+      />
     </div>
     <ChatInput
       v-if="!isEmpty"
@@ -87,7 +103,6 @@ async function handleBranch(assistantMessageId: number) {
       @send="handleSend"
       @stop="handleStop"
       @attach="attachImageToChat"
-      :is-thinking="isThinking"
       @retry="handleRetry"
       @edit="handleEdit"
       @branch="handleBranch"

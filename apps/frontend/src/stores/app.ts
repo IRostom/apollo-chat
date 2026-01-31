@@ -1,44 +1,59 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import type { Model } from '@/types/chat'
+import type { Model, ProviderName } from '@/types/chat'
 
 export const useAppStore = defineStore(
   'app',
   () => {
+    // Provider and model selection
+    const userSelectedProvider = ref<ProviderName>('ollama')
     const userSelectedModel = ref<Model | undefined>(undefined)
-    const userSelectedModelFamily = ref<string | undefined>(undefined)
-    const userSelectedModelName = computed(() => userSelectedModel.value?.name)
-    const canThink = computed(() => userSelectedModel.value?.thinking ?? false)
-    const shouldThink = ref(false)
-    const canUseWebTools = computed(() => userSelectedModel.value?.tools ?? false)
-    const useWebTools = ref(false)
-    const supportsVision = computed(() => userSelectedModel.value?.vision ?? false)
 
-    function updateUserSelectedModel(v: Model | undefined) {
-      userSelectedModel.value = v
+    // Computed values
+    const userSelectedModelId = computed(() => userSelectedModel.value?.id)
+    const userSelectedModelName = computed(() => userSelectedModel.value?.name)
+
+    // Model capabilities
+    const canUseTools = computed(() => userSelectedModel.value?.capabilities?.tools ?? false)
+    const supportsVision = computed(() => userSelectedModel.value?.capabilities?.vision ?? false)
+
+    // User preferences
+    const useWebTools = ref(false)
+
+    // Actions
+    function updateUserSelectedProvider(provider: ProviderName) {
+      userSelectedProvider.value = provider
     }
-    function updateUserSelectedModelFamily(v: string | undefined) {
-      userSelectedModelFamily.value = v
+
+    function updateUserSelectedModel(model: Model | undefined) {
+      userSelectedModel.value = model
+      // Update provider when model is selected
+      if (model) {
+        userSelectedProvider.value = model.provider
+      }
     }
-    function updateShouldThink(v: boolean) {
-      shouldThink.value = v
-    }
-    function updateUseWebTools(v: boolean) {
-      useWebTools.value = v
+
+    function updateUseWebTools(value: boolean) {
+      useWebTools.value = value
     }
 
     return {
+      // State
+      userSelectedProvider,
       userSelectedModel,
-      userSelectedModelFamily,
+
+      // Computed
+      userSelectedModelId,
       userSelectedModelName,
-      canThink,
-      canUseWebTools,
-      shouldThink,
-      useWebTools,
+      canUseTools,
       supportsVision,
+
+      // Preferences
+      useWebTools,
+
+      // Actions
+      updateUserSelectedProvider,
       updateUserSelectedModel,
-      updateUserSelectedModelFamily,
-      updateShouldThink,
       updateUseWebTools,
     }
   },

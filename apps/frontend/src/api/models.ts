@@ -1,9 +1,10 @@
-import { API_CONFIG } from '@/config/api'
+import { API_CONFIG, getApiUrl } from '@/config/api'
+import type { ModelsByProvider } from '@/types/chat'
 
-import { getApiUrl } from '@/config/api'
-import type { ModelsByFamily } from '@/types/chat'
-
-export async function getModels(): Promise<ModelsByFamily> {
+/**
+ * Fetch models from all configured providers
+ */
+export async function getModels(): Promise<ModelsByProvider> {
   const response = await fetch(getApiUrl(API_CONFIG.endpoints.models.list))
 
   if (!response.ok) {

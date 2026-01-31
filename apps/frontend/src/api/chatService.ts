@@ -1,183 +1,14 @@
 /**
  * Chat API Service
- * Handles all API calls related to chat functionality
+ * Handles conversation and history API calls
+ * Note: Message streaming is now handled by @ai-sdk/vue useChat
  */
 
 import { getApiUrl, API_CONFIG } from '@/config/api'
-import type {
-  ChatMessageServer,
-  Conversation,
-  EditMessageOptions,
-  RetryMessageOptions,
-  SendMessageOptions,
-  StreamFrame,
-} from '@/types/chat'
+import type { ChatMessageServer, Conversation } from '@/types/chat'
 
 /**
- * Stream handler function type
- */
-export type StreamHandler = (frame: StreamFrame) => void
-
-/**
- * Stream NDJSON from an endpoint and call onFrame for each parsed frame
- * @param signal - Optional AbortSignal to cancel the stream
- * @returns true if completed normally, false if aborted
- */
-async function streamFromEndpoint(
-  url: string,
-  body: object,
-  onFrame: StreamHandler,
-  signal?: AbortSignal,
-): Promise<boolean> {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-    signal,
-  })
-
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
-  }
-
-  if (!response.body) {
-    throw new Error('Response body is null')
-  }
-
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-
-      if (done) {
-        break
-      }
-
-      // Decode the chunk and add to buffer
-      buffer += decoder.decode(value, { stream: true })
-
-      // Process complete lines (NDJSON format)
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || '' // Keep incomplete line in buffer
-
-      for (const line of lines) {
-        if (!line.trim()) continue
-
-        try {
-          const frame = JSON.parse(line) as StreamFrame
-          onFrame(frame)
-        } catch (parseError) {
-          console.error('Error parsing frame:', parseError, 'Line:', line)
-        }
-      }
-    }
-
-    // Process any remaining buffer
-    if (buffer.trim()) {
-      try {
-        const frame = JSON.parse(buffer) as StreamFrame
-        onFrame(frame)
-      } catch {
-        // Ignore parse errors for incomplete frames
-      }
-    }
-
-    return true // Completed normally
-  } catch (error) {
-    // Handle abort gracefully - not an error condition
-    if (error instanceof Error && error.name === 'AbortError') {
-      return false // Aborted by user
-    }
-    throw error // Re-throw other errors
-  }
-}
-
-/**
- * Send a message and stream the response
- * @param signal - Optional AbortSignal to cancel the stream
- * @returns true if completed normally, false if aborted
- */
-export async function sendMessage(
-  options: SendMessageOptions,
-  onFrame: StreamHandler,
-  signal?: AbortSignal,
-): Promise<boolean> {
-  const { model, message, conversationId, webTools, think } = options
-
-  return streamFromEndpoint(
-    getApiUrl(API_CONFIG.endpoints.chat.stream),
-    {
-      model,
-      message,
-      conversationId: conversationId || undefined,
-      webTools,
-      think,
-    },
-    onFrame,
-    signal,
-  )
-}
-
-/**
- * Retry a message and stream the response
- * @param signal - Optional AbortSignal to cancel the stream
- * @returns true if completed normally, false if aborted
- */
-export async function retryMessage(
-  options: RetryMessageOptions,
-  onFrame: StreamHandler,
-  signal?: AbortSignal,
-): Promise<boolean> {
-  const { messageId, conversationId, model, think, webTools } = options
-
-  return streamFromEndpoint(
-    getApiUrl(API_CONFIG.endpoints.chat.retry),
-    {
-      messageId,
-      conversationId,
-      model,
-      think,
-      webTools,
-    },
-    onFrame,
-    signal,
-  )
-}
-
-/**
- * Edit a user message and stream the new response
- * @param signal - Optional AbortSignal to cancel the stream
- * @returns true if completed normally, false if aborted
- */
-export async function editMessage(
-  options: EditMessageOptions,
-  onFrame: StreamHandler,
-  signal?: AbortSignal,
-): Promise<boolean> {
-  const { messageId, conversationId, content, model, think, webTools } = options
-
-  return streamFromEndpoint(
-    getApiUrl(API_CONFIG.endpoints.chat.edit),
-    {
-      messageId,
-      conversationId,
-      content,
-      model,
-      think,
-      webTools,
-    },
-    onFrame,
-    signal,
-  )
-}
-
-/**
- * Get a conversation by ID
+ * Get a conversation's messages by ID
  */
 export async function getConversation(id: string): Promise<ChatMessageServer[]> {
   const response = await fetch(getApiUrl(API_CONFIG.endpoints.conversations.get(id)))
@@ -205,7 +36,6 @@ export async function getConversations(): Promise<Conversation[]> {
 
 /**
  * Delete a conversation by ID
- * Returns the deleted conversation id for downstream use.
  */
 export async function deleteConversation(id: string): Promise<void> {
   const response = await fetch(getApiUrl(API_CONFIG.endpoints.conversations.delete(id)), {
@@ -216,7 +46,6 @@ export async function deleteConversation(id: string): Promise<void> {
     const res = await response.json().catch(() => ({ error: 'Failed to delete conversation' }))
     throw new Error(res.error || 'Failed to delete conversation')
   }
-
 }
 
 /**

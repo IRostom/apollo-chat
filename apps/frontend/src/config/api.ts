@@ -9,10 +9,17 @@ export const API_CONFIG = {
   baseUrl: API_BASE_URL,
   endpoints: {
     chat: {
-      stream: '/chat/stream',
-      retry: '/chat/stream/retry',
-      edit: '/chat/stream/edit',
+      api: '/api/chat', // New AI SDK endpoint with trigger routing
+      stream: '/chat/stream', // Legacy endpoint
+      retry: '/chat/stream/retry', // Legacy endpoint
+      edit: '/chat/stream/edit', // Legacy endpoint
       branch: '/chat/branch',
+    },
+    settings: {
+      list: '/settings',
+      providers: '/settings/providers',
+      update: (key: string) => `/settings/${key}`,
+      delete: (key: string) => `/settings/${key}`,
     },
     conversations: {
       list: '/conversations',

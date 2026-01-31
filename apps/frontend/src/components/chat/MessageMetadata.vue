@@ -21,6 +21,7 @@ const metadataItems = computed<MetadataItem[]>(() => {
 
   const items: MetadataItem[] = []
 
+  // Model name
   if (meta.model) {
     items.push({
       id: 'model',
@@ -29,7 +30,15 @@ const metadataItems = computed<MetadataItem[]>(() => {
     })
   }
 
-  if (meta.eval_count && meta.eval_duration) {
+  // Tokens per second (use pre-calculated value or compute from Ollama metrics)
+  if (meta.tokensPerSecond && Number.isFinite(meta.tokensPerSecond) && meta.tokensPerSecond > 0) {
+    items.push({
+      id: 'tokensPerSecond',
+      value: `${meta.tokensPerSecond.toFixed(2)} tok/s`,
+      icon: Gauge,
+    })
+  } else if (meta.eval_count && meta.eval_duration) {
+    // Fallback: Calculate from Ollama metrics (duration in nanoseconds)
     const tokensPerSecond = meta.eval_count / (meta.eval_duration / 1_000_000_000)
     if (Number.isFinite(tokensPerSecond) && tokensPerSecond > 0) {
       items.push({
@@ -40,7 +49,8 @@ const metadataItems = computed<MetadataItem[]>(() => {
     }
   }
 
-  const totalTokens = (meta.prompt_eval_count ?? 0) + (meta.eval_count ?? 0)
+  // Total tokens (prefer AI SDK format, fallback to Ollama)
+  const totalTokens = meta.totalTokens ?? (meta.prompt_eval_count ?? 0) + (meta.eval_count ?? 0)
   if (totalTokens > 0) {
     items.push({
       id: 'tokens',
@@ -49,6 +59,7 @@ const metadataItems = computed<MetadataItem[]>(() => {
     })
   }
 
+  // Time to first token (Ollama specific)
   const timeToFirst = (meta.load_duration ?? 0) + (meta.prompt_eval_duration ?? 0)
   if (timeToFirst > 0) {
     items.push({
