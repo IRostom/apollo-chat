@@ -8,6 +8,8 @@ import uploadRouter from "./routes/upload";
 import transcribeRouter from "./routes/transcribe";
 import path from "path";
 import modelsRouter from "./routes/models";
+// V1 API routes (AI SDK)
+import v1ChatRouter from "./routes/v1/chat";
 
 const app: Express = express();
 
@@ -37,6 +39,10 @@ app.use("/", ollamaRouter);
 app.use("/", uploadRouter);
 app.use("/", transcribeRouter);
 app.use("/", modelsRouter);
+
+// V1 API routes (AI SDK based)
+app.use("/api/v1/chat", v1ChatRouter);
+
 // Serve static files from uploads directory
 const uploadDir = path.join(__dirname, "../uploads");
 app.use("/uploads", express.static(uploadDir));

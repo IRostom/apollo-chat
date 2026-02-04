@@ -19,14 +19,20 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@ai-sdk/anthropic": "^1.0.0",
+    "@ai-sdk/google": "^1.0.0",
+    "@ai-sdk/openai": "^1.0.0",
     "@libsql/client": "^0.15.15",
+    "ai": "^6.0.48",
+    "ai-sdk-ollama": "^3.3.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "dockerode": "^4.0.2",
     "drizzle-orm": "^0.45.1",
     "express": "^4.18.2",
     "express-validator": "^7.0.1",
-    "ollama": "^0.6.3"
+    "ollama": "^0.6.3",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
