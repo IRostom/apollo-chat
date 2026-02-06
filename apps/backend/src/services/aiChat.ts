@@ -2,34 +2,7 @@ import { db } from "../db/client";
 import { aiConversationsTable, aiMessagesTable } from "../db/schema";
 import { and, eq, gt, lte, desc } from "drizzle-orm";
 import type { Provider } from "../providers/factory";
-
-// AI SDK message types - using the types from the SDK
-type MessageRole = "user" | "assistant" | "tool" | "system";
-
-interface TextPart {
-  type: "text";
-  text: string;
-}
-
-interface ToolCallPart {
-  type: "tool-call";
-  toolCallId: string;
-  toolName: string;
-  args: unknown;
-}
-
-interface ToolResultPart {
-  type: "tool-result";
-  toolCallId: string;
-  toolName: string;
-  result: unknown;
-}
-
-// AI SDK compatible message type
-export interface AISDKMessage {
-  role: MessageRole;
-  content: string | Array<TextPart | ToolCallPart | ToolResultPart>;
-}
+import type { ModelMessage } from "ai";
 
 // ============================================================================
 // JSON Serialization Helpers for SQLite
@@ -60,17 +33,6 @@ export interface CreateAIConversationInput {
   system_prompt?: string;
 }
 
-export interface AddAIMessageInput {
-  conversation_id: number;
-  role: "user" | "assistant" | "tool";
-  content: string;
-  parts?: unknown;
-  tool_invocations?: unknown;
-  reasoning?: string;
-  attachments?: unknown;
-  metadata?: unknown;
-}
-
 export interface AIConversation {
   id: number;
   title: string;
@@ -85,11 +47,7 @@ export interface AIMessage {
   id: number;
   conversation_id: number;
   role: string;
-  content: string;
-  parts: string | null;
-  tool_invocations: string | null;
-  reasoning: string | null;
-  attachments: string | null;
+  message: string; // JSON-serialized ModelMessage
   metadata: string | null;
   created_at: string;
 }
@@ -152,24 +110,55 @@ export async function deleteAIConversation(id: number): Promise<void> {
 // ============================================================================
 
 /**
- * Add a message to a conversation
- * Handles JSON serialization for complex fields
+ * Add a single ModelMessage to a conversation.
+ * The message is JSON-serialized and the role is extracted for query convenience.
  */
-export async function addAIMessage(input: AddAIMessageInput): Promise<number> {
+export async function addAIMessage(
+  conversationId: number,
+  message: ModelMessage,
+  metadata?: unknown
+): Promise<number> {
   const [msg] = await db
     .insert(aiMessagesTable)
     .values({
-      conversation_id: input.conversation_id,
-      role: input.role,
-      content: input.content,
-      parts: serializeJSON(input.parts),
-      tool_invocations: serializeJSON(input.tool_invocations),
-      reasoning: input.reasoning ?? null,
-      attachments: serializeJSON(input.attachments),
-      metadata: serializeJSON(input.metadata),
+      conversation_id: conversationId,
+      role: message.role,
+      message: JSON.stringify(message),
+      metadata: serializeJSON(metadata),
     })
     .returning({ insertedId: aiMessagesTable.id });
   return msg.insertedId;
+}
+
+/**
+ * Add multiple ModelMessages to a conversation (e.g. from response.messages).
+ * Returns the IDs of the inserted messages.
+ */
+export async function addAIMessages(
+  conversationId: number,
+  messages: ModelMessage[],
+  metadata?: unknown
+): Promise<number[]> {
+  if (messages.length === 0) return [];
+
+  const rows = messages.map((message) => ({
+    conversation_id: conversationId,
+    role: message.role,
+    message: JSON.stringify(message),
+    metadata: null as string | null,
+  }));
+
+  // Attach metadata to the last message
+  if (metadata && rows.length > 0) {
+    rows[rows.length - 1].metadata = serializeJSON(metadata);
+  }
+
+  const result = await db
+    .insert(aiMessagesTable)
+    .values(rows)
+    .returning({ insertedId: aiMessagesTable.id });
+
+  return result.map((r) => r.insertedId);
 }
 
 /**
@@ -202,70 +191,16 @@ export async function getAIMessages(conversationId: number): Promise<AIMessage[]
 }
 
 /**
- * Load messages and convert to AI SDK message format
+ * Load messages and return as ModelMessage[] for direct use with the AI SDK.
+ * Simply parses the JSON-serialized message column.
  */
-export async function loadAIMessagesAsCoreMessages(
+export async function loadAIMessagesAsModelMessages(
   conversationId: number
-): Promise<AISDKMessage[]> {
+): Promise<ModelMessage[]> {
   const rows = await getAIMessages(conversationId);
-
-  return rows.map((row): AISDKMessage => {
-    const toolInvocations = parseJSON<unknown[]>(row.tool_invocations);
-
-    // Map to AISDKMessage based on role
-    if (row.role === "user") {
-      return {
-        role: "user",
-        content: row.content,
-      };
-    } else if (row.role === "assistant") {
-      // Assistant messages may include tool calls
-      if (
-        toolInvocations &&
-        Array.isArray(toolInvocations) &&
-        toolInvocations.length > 0
-      ) {
-        return {
-          role: "assistant",
-          content: [
-            ...(row.content
-              ? [{ type: "text" as const, text: row.content }]
-              : []),
-            ...toolInvocations.map((invocation: any) => ({
-              type: "tool-call" as const,
-              toolCallId: invocation.toolCallId,
-              toolName: invocation.toolName,
-              args: invocation.args,
-            })),
-          ],
-        };
-      }
-      return {
-        role: "assistant",
-        content: row.content,
-      };
-    } else if (row.role === "tool") {
-      // Tool result messages
-      const invocation = toolInvocations?.[0] as any;
-      return {
-        role: "tool",
-        content: [
-          {
-            type: "tool-result",
-            toolCallId: invocation?.toolCallId ?? "unknown",
-            toolName: invocation?.toolName ?? "unknown",
-            result: row.content,
-          },
-        ],
-      };
-    }
-
-    // Fallback to user message
-    return {
-      role: "user",
-      content: row.content,
-    };
-  });
+  return rows
+    .map((row) => parseJSON<ModelMessage>(row.message))
+    .filter((msg): msg is ModelMessage => msg !== undefined);
 }
 
 /**
@@ -304,16 +239,45 @@ export async function deleteAIMessagesAfter(
 }
 
 /**
- * Update message content
+ * Update message content (for editing user messages).
+ * Parses the stored ModelMessage JSON, updates the content, and re-serializes.
  */
 export async function updateAIMessageContent(
   messageId: number,
   conversationId: number,
   content: string
 ): Promise<void> {
+  const existing = await getAIMessageById(messageId, conversationId);
+  if (!existing) return;
+
+  const message = parseJSON<ModelMessage>(existing.message);
+  if (!message) return;
+
+  // Update the content field in the ModelMessage
+  const updated: ModelMessage = { ...message, content } as ModelMessage;
+
   await db
     .update(aiMessagesTable)
-    .set({ content })
+    .set({ message: JSON.stringify(updated) })
+    .where(
+      and(
+        eq(aiMessagesTable.id, messageId),
+        eq(aiMessagesTable.conversation_id, conversationId)
+      )
+    );
+}
+
+/**
+ * Update metadata for a specific message (e.g. to attach usage/finishReason).
+ */
+export async function updateMessageMetadata(
+  messageId: number,
+  conversationId: number,
+  metadata: unknown
+): Promise<void> {
+  await db
+    .update(aiMessagesTable)
+    .set({ metadata: serializeJSON(metadata) })
     .where(
       and(
         eq(aiMessagesTable.id, messageId),

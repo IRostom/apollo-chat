@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { body, validationResult } from "express-validator";
 import { streamText, stepCountIs } from "ai";
+import type { ModelMessage } from "ai";
 import {
   getModel,
   isProviderConfigured,
@@ -11,7 +12,8 @@ import {
   createAIConversation,
   getAIConversation,
   addAIMessage,
-  loadAIMessagesAsCoreMessages,
+  addAIMessages,
+  loadAIMessagesAsModelMessages,
   getAIMessageById,
   getAIMessages,
   deleteAIMessagesAfter,
@@ -200,21 +202,17 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
     }
 
     // Load existing messages
-    const messages = convId ? await loadAIMessagesAsCoreMessages(convId) : [];
+    const messages = convId ? await loadAIMessagesAsModelMessages(convId) : [];
 
-    // Add user message to history and database
-    await addAIMessage({
-      conversation_id: convId,
+    // Save user message as a ModelMessage to the database
+    const userMessage: ModelMessage = {
       role: "user",
       content: message.content,
-      attachments: message.attachments,
-    });
+    };
+    await addAIMessage(convId, userMessage);
 
     // Add user message to messages array for the API call
-    messages.push({
-      role: "user",
-      content: message.content,
-    });
+    messages.push(userMessage);
 
     // Get enabled tools
     const tools = getEnabledTools({ enableCodeTools, enableWebTools });
@@ -232,20 +230,19 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
       system: systemPrompt,
       tools: Object.keys(tools).length > 0 ? tools : undefined,
       stopWhen: stepCountIs(10),
-      onFinish: async ({ text, toolCalls, usage, finishReason }) => {
-        // Save assistant message to database
-        await addAIMessage({
-          conversation_id: conversationIdForCallback,
-          role: "assistant",
-          content: text,
-          tool_invocations: toolCalls?.length ? toolCalls : undefined,
-          metadata: { usage, finishReason },
-        });
+      onFinish: async ({ usage, finishReason, response }) => {
+        // Save all response messages (assistant + tool) directly from the SDK
+        await addAIMessages(
+          conversationIdForCallback,
+          response.messages,
+          { usage, finishReason }
+        );
 
         console.log("Chat completed:", {
           convId: conversationIdForCallback,
           finishReason,
           usage,
+          responseMessages: response.messages.length,
         });
       },
       onError: ({ error }) => {
@@ -339,7 +336,7 @@ router.post("/retry", retryValidation, async (req: Request, res: Response) => {
     await deleteAIMessagesAfter(convId, userMessageId);
 
     // Load remaining messages
-    const messages = await loadAIMessagesAsCoreMessages(convId);
+    const messages = await loadAIMessagesAsModelMessages(convId);
 
     // Get conversation for system prompt
     const conversation = await getAIConversation(convId);
@@ -357,13 +354,11 @@ router.post("/retry", retryValidation, async (req: Request, res: Response) => {
       system: conversation?.system_prompt ?? undefined,
       tools: Object.keys(tools).length > 0 ? tools : undefined,
       stopWhen: stepCountIs(10),
-      onFinish: async ({ text, toolCalls, usage, finishReason }) => {
-        await addAIMessage({
-          conversation_id: convId,
-          role: "assistant",
-          content: text,
-          tool_invocations: toolCalls?.length ? toolCalls : undefined,
-          metadata: { usage, finishReason },
+      onFinish: async ({ usage, finishReason, response }) => {
+        // Save all response messages directly from the SDK
+        await addAIMessages(convId, response.messages, {
+          usage,
+          finishReason,
         });
 
         console.log("Retry completed:", { convId, finishReason, usage });
@@ -432,7 +427,7 @@ router.post("/edit", editValidation, async (req: Request, res: Response) => {
     await deleteAIMessagesAfter(convId, messageId);
 
     // Load remaining messages (including the edited one)
-    const messages = await loadAIMessagesAsCoreMessages(convId);
+    const messages = await loadAIMessagesAsModelMessages(convId);
 
     // Get conversation for system prompt
     const conversation = await getAIConversation(convId);
@@ -450,13 +445,11 @@ router.post("/edit", editValidation, async (req: Request, res: Response) => {
       system: conversation?.system_prompt ?? undefined,
       tools: Object.keys(tools).length > 0 ? tools : undefined,
       stopWhen: stepCountIs(10),
-      onFinish: async ({ text, toolCalls, usage, finishReason }) => {
-        await addAIMessage({
-          conversation_id: convId,
-          role: "assistant",
-          content: text,
-          tool_invocations: toolCalls?.length ? toolCalls : undefined,
-          metadata: { usage, finishReason },
+      onFinish: async ({ usage, finishReason, response }) => {
+        // Save all response messages directly from the SDK
+        await addAIMessages(convId, response.messages, {
+          usage,
+          finishReason,
         });
 
         console.log("Edit completed:", { convId, finishReason, usage });
