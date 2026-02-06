@@ -11,6 +11,7 @@ import modelsRouter from "./routes/models";
 // V1 API routes (AI SDK)
 import v1ChatRouter from "./routes/v1/chat";
 import v1ConversationRouter from "./routes/v1/conversation";
+import v1ModelsRouter from "./routes/v1/models";
 
 const app: Express = express();
 
@@ -44,6 +45,7 @@ app.use("/", modelsRouter);
 // V1 API routes (AI SDK based)
 app.use("/api/v1/chat", v1ChatRouter);
 app.use("/api/v1/conversations", v1ConversationRouter);
+app.use("/api/v1/models", v1ModelsRouter);
 
 // Serve static files from uploads directory
 const uploadDir = path.join(__dirname, "../uploads");

@@ -24,7 +24,7 @@
     "@ai-sdk/openai": "^1.0.0",
     "@libsql/client": "^0.15.15",
     "ai": "^6.0.48",
-    "ai-sdk-ollama": "^3.3.0",
+    "ai-sdk-ollama": "^3.4.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "dockerode": "^4.0.2",

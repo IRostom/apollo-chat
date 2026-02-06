@@ -25,9 +25,14 @@ const router = Router();
 // ============================================================================
 
 type ResponseFormat = "ui" | "text";
+type ApiProvider = Provider | "ollama-local";
+
+function mapApiProvider(provider: ApiProvider): Provider {
+  return provider === "ollama-local" ? "ollama" : provider;
+}
 
 interface ChatRequestBody {
-  provider: Provider;
+  provider: ApiProvider;
   model: string;
   /** Full UIMessage from the frontend Chat class */
   message: UIMessage;
@@ -40,7 +45,7 @@ interface ChatRequestBody {
 }
 
 interface RetryRequestBody {
-  provider: Provider;
+  provider: ApiProvider;
   model: string;
   /** UIMessage ID (string) of the assistant message to retry */
   messageId: string;
@@ -52,7 +57,7 @@ interface RetryRequestBody {
 }
 
 interface EditRequestBody {
-  provider: Provider;
+  provider: ApiProvider;
   model: string;
   /** UIMessage ID (string) of the user message to edit */
   messageId: string;
@@ -71,8 +76,17 @@ interface EditRequestBody {
 const chatValidation = [
   body("provider")
     .isString()
-    .isIn(["openai", "google", "anthropic", "ollama"])
-    .withMessage("Provider must be one of: openai, google, anthropic, ollama"),
+    .isIn([
+      "openai",
+      "google",
+      "anthropic",
+      "ollama",
+      "ollama-local",
+      "ollama-cloud",
+    ])
+    .withMessage(
+      "Provider must be one of: openai, google, anthropic, ollama, ollama-local, ollama-cloud"
+    ),
   body("model").isString().notEmpty().withMessage("Model is required"),
   body("message").isObject().withMessage("Message must be an object"),
   body("message.role")
@@ -95,8 +109,17 @@ const chatValidation = [
 const retryValidation = [
   body("provider")
     .isString()
-    .isIn(["openai", "google", "anthropic", "ollama"])
-    .withMessage("Provider must be one of: openai, google, anthropic, ollama"),
+    .isIn([
+      "openai",
+      "google",
+      "anthropic",
+      "ollama",
+      "ollama-local",
+      "ollama-cloud",
+    ])
+    .withMessage(
+      "Provider must be one of: openai, google, anthropic, ollama, ollama-local, ollama-cloud"
+    ),
   body("model").isString().notEmpty().withMessage("Model is required"),
   body("messageId")
     .isString()
@@ -118,8 +141,17 @@ const retryValidation = [
 const editValidation = [
   body("provider")
     .isString()
-    .isIn(["openai", "google", "anthropic", "ollama"])
-    .withMessage("Provider must be one of: openai, google, anthropic, ollama"),
+    .isIn([
+      "openai",
+      "google",
+      "anthropic",
+      "ollama",
+      "ollama-local",
+      "ollama-cloud",
+    ])
+    .withMessage(
+      "Provider must be one of: openai, google, anthropic, ollama, ollama-local, ollama-cloud"
+    ),
   body("model").isString().notEmpty().withMessage("Model is required"),
   body("messageId")
     .isString()
@@ -168,7 +200,9 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
     responseFormat = "ui",
   } = req.body as ChatRequestBody;
 
-  if (!isProviderConfigured(provider)) {
+  const internalProvider = mapApiProvider(provider);
+
+  if (!isProviderConfigured(internalProvider)) {
     return res.status(400).json({
       error: `Provider '${provider}' is not configured. Please set the required API key.`,
     });
@@ -188,7 +222,7 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
 
       convId = await createAIConversation({
         title: titleText,
-        provider,
+        provider: internalProvider,
         model,
         system_prompt: systemPrompt,
       });
@@ -209,7 +243,9 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
 
     // Get tools and model instance
     const tools = getEnabledTools({ enableCodeTools, enableWebTools });
-    const modelInstance = getModel(provider, model, { think: enableThinking });
+    const modelInstance = getModel(internalProvider, model, {
+      think: enableThinking,
+    });
 
     const conversationIdForCallback = convId;
 
@@ -290,7 +326,9 @@ router.post("/retry", retryValidation, async (req: Request, res: Response) => {
 
   const convId = parseInt(conversationId, 10);
 
-  if (!isProviderConfigured(provider)) {
+  const internalProvider = mapApiProvider(provider);
+
+  if (!isProviderConfigured(internalProvider)) {
     return res.status(400).json({
       error: `Provider '${provider}' is not configured. Please set the required API key.`,
     });
@@ -326,7 +364,9 @@ router.post("/retry", retryValidation, async (req: Request, res: Response) => {
 
     // Get tools and model
     const tools = getEnabledTools({ enableCodeTools, enableWebTools });
-    const modelInstance = getModel(provider, model, { think: enableThinking });
+    const modelInstance = getModel(internalProvider, model, {
+      think: enableThinking,
+    });
 
     // Stream the response
     const result = streamText({
@@ -394,7 +434,9 @@ router.post("/edit", editValidation, async (req: Request, res: Response) => {
 
   const convId = parseInt(conversationId, 10);
 
-  if (!isProviderConfigured(provider)) {
+  const internalProvider = mapApiProvider(provider);
+
+  if (!isProviderConfigured(internalProvider)) {
     return res.status(400).json({
       error: `Provider '${provider}' is not configured. Please set the required API key.`,
     });
@@ -438,7 +480,9 @@ router.post("/edit", editValidation, async (req: Request, res: Response) => {
 
     // Get tools and model
     const tools = getEnabledTools({ enableCodeTools, enableWebTools });
-    const modelInstance = getModel(provider, model, { think: enableThinking });
+    const modelInstance = getModel(internalProvider, model, {
+      think: enableThinking,
+    });
 
     // Stream the response
     const result = streamText({

@@ -48,19 +48,28 @@ export interface Conversation {
 
 export interface Model {
   name: string
-  family: string
-  families: string[]
-  parameter_size: string
-  quantization_level: string
+  label?: string
+  providerId: string
+  family?: string
+  families?: string[]
+  parameter_size?: string
+  quantization_level?: string
   vision: boolean
   thinking: boolean
   tools: boolean
-  completion: boolean
-  context_length: number
+  completion?: boolean
+  context_length?: number
 }
 
-export interface ModelsByFamily {
-  [key: string]: Model[]
+export interface ProviderInfo {
+  id: string
+  label: string
+  isAvailable: boolean
+  models: Model[]
+}
+
+export interface ProvidersResponse {
+  providers: ProviderInfo[]
 }
 
 export type StreamFrameType =

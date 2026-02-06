@@ -41,9 +41,7 @@ export function useV1Chat() {
    * Get the provider name for the currently selected model.
    */
   function getProvider(): string {
-    // TODO: When multi-provider support is added to the models list,
-    // derive the provider from the model data
-    return 'ollama'
+    return appStore.userSelectedProvider ?? appStore.userSelectedModel?.providerId ?? 'ollama-local'
   }
 
   // Create transport with custom request preparation

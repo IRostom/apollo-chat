@@ -30,7 +30,7 @@ export const API_CONFIG = {
       delete: (id: string) => `/conversations/${id}`,
     },
     models: {
-      list: '/models',
+      list: '/api/v1/models',
     },
     upload: {
       file: '/upload',

@@ -57,8 +57,21 @@ const isEditing = computed(() => props.editingContent !== undefined)
 
 const appStore = useAppStore()
 // TODO:
-const { data: modelsByFamily, isError: isModelsError, error: modelsError } = useModels()
-const modelFamilies = computed(() => Object.keys(modelsByFamily.value ?? {}))
+const { data: providersResponse, isError: isModelsError, error: modelsError } = useModels()
+const providers = computed(() => providersResponse.value?.providers ?? [])
+const selectedProviderLabel = computed(() => {
+  const providerId = appStore.userSelectedProvider
+  return providers.value.find((provider) => provider.id === providerId)?.label
+})
+const selectedModelLabel = computed(
+  () => appStore.userSelectedModel?.label ?? appStore.userSelectedModel?.name,
+)
+const selectedModelDisplay = computed(() => {
+  if (selectedProviderLabel.value && selectedModelLabel.value) {
+    return `${selectedProviderLabel.value} / ${selectedModelLabel.value}`
+  }
+  return selectedModelLabel.value ?? 'Select Model'
+})
 const { startRecording, stopRecordingAndTranscribe, isRecording, isTranscribing, canRecord } =
   useRecordAndTranscribe((result) => {
     console.log('transcribe result: ', result)
@@ -244,21 +257,29 @@ onUnmounted(() => {
           <DropdownMenu>
             <DropdownMenuTrigger as-child>
               <InputGroupButton variant="ghost" class="capitalize">
-                {{ userSelectedModelName ?? 'Select Model' }}
+                {{ selectedModelDisplay }}
                 <ChevronDown />
               </InputGroupButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="start" class="[--radius:0.95rem]">
-              <DropdownMenuSub v-for="family in modelFamilies" :key="family">
-                <DropdownMenuSubTrigger class="capitalize">{{ family }}</DropdownMenuSubTrigger>
+              <DropdownMenuSub v-for="provider in providers" :key="provider.id">
+                <DropdownMenuSubTrigger class="capitalize">
+                  {{ provider.label }}
+                  <span v-if="!provider.isAvailable" class="text-xs text-muted-foreground">
+                    (unavailable)
+                  </span>
+                </DropdownMenuSubTrigger>
                 <DropdownMenuPortal>
                   <DropdownMenuSubContent>
+                    <DropdownMenuItem v-if="provider.models.length === 0" disabled>
+                      No models available
+                    </DropdownMenuItem>
                     <DropdownMenuItem
-                      v-for="model in modelsByFamily?.[family] ?? []"
+                      v-for="model in provider.models"
                       :key="model.name"
                       @click="updateSelectedModel(model)"
                       class="capitalize"
-                      >{{ model.name }}
+                      >{{ model.label ?? model.name }}
                       <div v-if="model.vision" class="border border-yellow-300 rounded py-0.5 px-1">
                         <Eye class="size-4 text-yellow-300" />
                       </div>

@@ -1,9 +1,14 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { ollama } from "ai-sdk-ollama";
+import { createOllama, ollama } from "ai-sdk-ollama";
 
-export type Provider = "openai" | "google" | "anthropic" | "ollama";
+export type Provider =
+  | "openai"
+  | "google"
+  | "anthropic"
+  | "ollama"
+  | "ollama-cloud";
 
 // Create provider instances with API keys from environment variables
 const openaiProvider = createOpenAI({
@@ -16,6 +21,11 @@ const googleProvider = createGoogleGenerativeAI({
 
 const anthropicProvider = createAnthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
+});
+
+const ollamaCloudProvider = createOllama({
+  baseURL: "https://ollama.com",
+  apiKey: process.env.OLLAMA_API_KEY,
 });
 
 // Ollama uses OLLAMA_HOST from environment (handled by ai-sdk-ollama)
@@ -44,6 +54,10 @@ export function getModel(provider: Provider, modelId: string, options?: ModelOpt
       return ollama(modelId, {
         ...(options?.think !== undefined && { think: options.think }),
       });
+    case "ollama-cloud":
+      return ollamaCloudProvider(modelId, {
+        ...(options?.think !== undefined && { think: options.think }),
+      });
     default:
       throw new Error(`Unknown provider: ${provider}`);
   }
@@ -65,6 +79,8 @@ export function isProviderConfigured(provider: Provider): boolean {
     case "ollama":
       // Ollama is always available if the server is running
       return true;
+    case "ollama-cloud":
+      return !!process.env.OLLAMA_API_KEY;
     default:
       return false;
   }

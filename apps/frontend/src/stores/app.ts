@@ -6,6 +6,7 @@ export const useAppStore = defineStore(
   'app',
   () => {
     const userSelectedModel = ref<Model | undefined>(undefined)
+    const userSelectedProvider = ref<string | undefined>(undefined)
     const userSelectedModelFamily = ref<string | undefined>(undefined)
     const userSelectedModelName = computed(() => userSelectedModel.value?.name)
     const canThink = computed(() => userSelectedModel.value?.thinking ?? false)
@@ -16,6 +17,12 @@ export const useAppStore = defineStore(
 
     function updateUserSelectedModel(v: Model | undefined) {
       userSelectedModel.value = v
+      if (v?.providerId) {
+        userSelectedProvider.value = v.providerId
+      }
+    }
+    function updateUserSelectedProvider(v: string | undefined) {
+      userSelectedProvider.value = v
     }
     function updateUserSelectedModelFamily(v: string | undefined) {
       userSelectedModelFamily.value = v
@@ -29,6 +36,7 @@ export const useAppStore = defineStore(
 
     return {
       userSelectedModel,
+      userSelectedProvider,
       userSelectedModelFamily,
       userSelectedModelName,
       canThink,
@@ -37,6 +45,7 @@ export const useAppStore = defineStore(
       useWebTools,
       supportsVision,
       updateUserSelectedModel,
+      updateUserSelectedProvider,
       updateUserSelectedModelFamily,
       updateShouldThink,
       updateUseWebTools,

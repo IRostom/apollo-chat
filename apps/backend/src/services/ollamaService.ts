@@ -69,6 +69,45 @@ export async function listOllamaModelsByFamily(): Promise<ModelsByFamily> {
   }
 }
 
+export async function listOllamaModelsFlat(): Promise<Model[]> {
+  try {
+    const response = await ollamaClient.list();
+    const modelNames = response.models.map((model) => model.name);
+    const models = await Promise.all(
+      modelNames.map(async (name) => {
+        const response = await ollamaClient.show({ model: name });
+        const family = response.details.family;
+
+        const contextLength =
+          (response.model_info as unknown as Record<string, number>)?.[
+            `${family}.context_length`
+          ] ?? undefined;
+
+        return {
+          name: name,
+          family: family,
+          families: response.details.families,
+          parameter_size: response.details.parameter_size,
+          quantization_level: response.details.quantization_level,
+          vision: response.capabilities.includes("vision"),
+          thinking: response.capabilities.includes("thinking"),
+          tools: response.capabilities.includes("tools"),
+          completion: response.capabilities.includes("completion"),
+          context_length: contextLength,
+        };
+      })
+    );
+
+    return models;
+  } catch (error: any) {
+    console.error("Error listing OLLAMA models:", error);
+    throw new Error(
+      "Failed to list models: " +
+        (error instanceof Error ? error.message : "Unknown error")
+    );
+  }
+}
+
 export async function PingOllama(): Promise<boolean> {
   try {
     await ollamaClient.version();
