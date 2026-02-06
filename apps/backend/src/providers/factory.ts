@@ -20,13 +20,19 @@ const anthropicProvider = createAnthropic({
 
 // Ollama uses OLLAMA_HOST from environment (handled by ai-sdk-ollama)
 
+export interface ModelOptions {
+  /** Enable thinking/reasoning output (Ollama models that support it) */
+  think?: boolean;
+}
+
 /**
  * Get a model instance for the specified provider and model ID
  * @param provider - The AI provider to use
  * @param modelId - The model identifier (e.g., 'gpt-4o', 'gemini-pro', 'claude-3-opus', 'llama3.2')
+ * @param options - Optional provider-specific settings (e.g. thinking)
  * @returns A language model instance compatible with the AI SDK
  */
-export function getModel(provider: Provider, modelId: string) {
+export function getModel(provider: Provider, modelId: string, options?: ModelOptions) {
   switch (provider) {
     case "openai":
       return openaiProvider(modelId);
@@ -35,7 +41,9 @@ export function getModel(provider: Provider, modelId: string) {
     case "anthropic":
       return anthropicProvider(modelId);
     case "ollama":
-      return ollama(modelId);
+      return ollama(modelId, {
+        ...(options?.think !== undefined && { think: options.think }),
+      });
     default:
       throw new Error(`Unknown provider: ${provider}`);
   }

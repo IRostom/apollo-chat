@@ -1,11 +1,11 @@
 import { db } from "../db/client";
 import { aiConversationsTable, aiMessagesTable } from "../db/schema";
-import { and, eq, gt, lte, desc } from "drizzle-orm";
+import { and, eq, gte, desc } from "drizzle-orm";
 import type { Provider } from "../providers/factory";
-import type { ModelMessage } from "ai";
+import type { UIMessage } from "ai";
 
 // ============================================================================
-// JSON Serialization Helpers for SQLite
+// JSON Serialization Helpers
 // ============================================================================
 
 function serializeJSON(obj: unknown): string | null {
@@ -43,21 +43,12 @@ export interface AIConversation {
   updated_at: string;
 }
 
-export interface AIMessage {
-  id: number;
-  conversation_id: number;
-  role: string;
-  message: string; // JSON-serialized ModelMessage
-  metadata: string | null;
-  created_at: string;
-}
-
 // ============================================================================
 // Conversation Operations
 // ============================================================================
 
 /**
- * Create a new AI conversation
+ * Create a new AI conversation.
  */
 export async function createAIConversation(
   input: CreateAIConversationInput
@@ -75,7 +66,7 @@ export async function createAIConversation(
 }
 
 /**
- * Get a conversation by ID
+ * Get a conversation by ID.
  */
 export async function getAIConversation(
   id: number
@@ -88,7 +79,7 @@ export async function getAIConversation(
 }
 
 /**
- * List all AI conversations, ordered by most recent
+ * List all AI conversations, ordered by most recent.
  */
 export async function listAIConversations(): Promise<AIConversation[]> {
   return db
@@ -98,190 +89,141 @@ export async function listAIConversations(): Promise<AIConversation[]> {
 }
 
 /**
- * Delete a conversation and all its messages
+ * Delete a conversation and all its messages.
  */
 export async function deleteAIConversation(id: number): Promise<void> {
-  await db.delete(aiMessagesTable).where(eq(aiMessagesTable.conversation_id, id));
-  await db.delete(aiConversationsTable).where(eq(aiConversationsTable.id, id));
+  await db
+    .delete(aiMessagesTable)
+    .where(eq(aiMessagesTable.conversation_id, id));
+  await db
+    .delete(aiConversationsTable)
+    .where(eq(aiConversationsTable.id, id));
 }
 
 // ============================================================================
-// Message Operations
+// UIMessage Persistence
+//
+// Per the AI SDK docs: "We recommend storing the messages in the useChat
+// message format" (UIMessage), not ModelMessage.
+//
+// Each UIMessage is stored as one row in ai_messages.
 // ============================================================================
 
 /**
- * Add a single ModelMessage to a conversation.
- * The message is JSON-serialized and the role is extracted for query convenience.
+ * Save a single UIMessage to the database.
  */
-export async function addAIMessage(
+export async function saveUIMessage(
   conversationId: number,
-  message: ModelMessage,
+  message: UIMessage,
   metadata?: unknown
-): Promise<number> {
-  const [msg] = await db
-    .insert(aiMessagesTable)
-    .values({
-      conversation_id: conversationId,
-      role: message.role,
-      message: JSON.stringify(message),
-      metadata: serializeJSON(metadata),
-    })
-    .returning({ insertedId: aiMessagesTable.id });
-  return msg.insertedId;
-}
-
-/**
- * Add multiple ModelMessages to a conversation (e.g. from response.messages).
- * Returns the IDs of the inserted messages.
- */
-export async function addAIMessages(
-  conversationId: number,
-  messages: ModelMessage[],
-  metadata?: unknown
-): Promise<number[]> {
-  if (messages.length === 0) return [];
-
-  const rows = messages.map((message) => ({
+): Promise<void> {
+  await db.insert(aiMessagesTable).values({
     conversation_id: conversationId,
     role: message.role,
     message: JSON.stringify(message),
-    metadata: null as string | null,
+    metadata: serializeJSON(metadata),
+  });
+}
+
+/**
+ * Save multiple UIMessages to the database.
+ * Metadata is attached to the last message.
+ */
+export async function saveUIMessages(
+  conversationId: number,
+  messages: UIMessage[],
+  metadata?: unknown
+): Promise<void> {
+  if (messages.length === 0) return;
+
+  const rows = messages.map((msg, i) => ({
+    conversation_id: conversationId,
+    role: msg.role,
+    message: JSON.stringify(msg),
+    metadata:
+      i === messages.length - 1 ? serializeJSON(metadata) : null,
   }));
 
-  // Attach metadata to the last message
-  if (metadata && rows.length > 0) {
-    rows[rows.length - 1].metadata = serializeJSON(metadata);
-  }
-
-  const result = await db
-    .insert(aiMessagesTable)
-    .values(rows)
-    .returning({ insertedId: aiMessagesTable.id });
-
-  return result.map((r) => r.insertedId);
+  await db.insert(aiMessagesTable).values(rows);
 }
 
 /**
- * Get a message by ID
+ * Load all UIMessages for a conversation, ordered by creation.
  */
-export async function getAIMessageById(
-  id: number,
+export async function loadUIMessages(
   conversationId: number
-): Promise<AIMessage | undefined> {
-  const [msg] = await db
+): Promise<UIMessage[]> {
+  const rows = await db
     .select()
     .from(aiMessagesTable)
-    .where(
-      and(
-        eq(aiMessagesTable.id, id),
-        eq(aiMessagesTable.conversation_id, conversationId)
-      )
-    );
-  return msg;
-}
+    .where(eq(aiMessagesTable.conversation_id, conversationId))
+    .orderBy(aiMessagesTable.id);
 
-/**
- * Get all messages for a conversation
- */
-export async function getAIMessages(conversationId: number): Promise<AIMessage[]> {
-  return db
-    .select()
-    .from(aiMessagesTable)
-    .where(eq(aiMessagesTable.conversation_id, conversationId));
-}
-
-/**
- * Load messages and return as ModelMessage[] for direct use with the AI SDK.
- * Simply parses the JSON-serialized message column.
- */
-export async function loadAIMessagesAsModelMessages(
-  conversationId: number
-): Promise<ModelMessage[]> {
-  const rows = await getAIMessages(conversationId);
   return rows
-    .map((row) => parseJSON<ModelMessage>(row.message))
-    .filter((msg): msg is ModelMessage => msg !== undefined);
+    .map((row) => parseJSON<UIMessage>(row.message))
+    .filter((msg): msg is UIMessage => {
+      if (!msg) return false;
+      // Validate basic UIMessage structure (skip old ModelMessage rows)
+      if (!Array.isArray(msg.parts)) {
+        console.warn(
+          "Skipping non-UIMessage row (missing parts array)"
+        );
+        return false;
+      }
+      return true;
+    });
 }
 
 /**
- * Get messages up to and including a specific message ID
+ * Get raw message rows with their DB IDs.
+ * Useful for retry/edit operations that need to delete/update specific rows.
  */
-export async function getAIMessagesUpTo(
-  conversationId: number,
-  messageId: number
-): Promise<AIMessage[]> {
-  return db
+export async function getMessageRows(
+  conversationId: number
+): Promise<{ dbId: number; uiMessage: UIMessage }[]> {
+  const rows = await db
     .select()
     .from(aiMessagesTable)
-    .where(
-      and(
-        eq(aiMessagesTable.conversation_id, conversationId),
-        lte(aiMessagesTable.id, messageId)
-      )
-    );
+    .where(eq(aiMessagesTable.conversation_id, conversationId))
+    .orderBy(aiMessagesTable.id);
+
+  return rows
+    .map((row) => ({
+      dbId: row.id,
+      uiMessage: parseJSON<UIMessage>(row.message)!,
+    }))
+    .filter((r) => r.uiMessage != null && Array.isArray(r.uiMessage.parts));
 }
 
 /**
- * Delete all messages after a specific message ID
+ * Delete all message rows with DB ID >= the given threshold.
  */
-export async function deleteAIMessagesAfter(
+export async function deleteMessageRowsFrom(
   conversationId: number,
-  messageId: number
+  fromDbId: number
 ): Promise<void> {
   await db
     .delete(aiMessagesTable)
     .where(
       and(
         eq(aiMessagesTable.conversation_id, conversationId),
-        gt(aiMessagesTable.id, messageId)
+        gte(aiMessagesTable.id, fromDbId)
       )
     );
 }
 
 /**
- * Update message content (for editing user messages).
- * Parses the stored ModelMessage JSON, updates the content, and re-serializes.
+ * Update a single message row's content.
  */
-export async function updateAIMessageContent(
-  messageId: number,
-  conversationId: number,
-  content: string
-): Promise<void> {
-  const existing = await getAIMessageById(messageId, conversationId);
-  if (!existing) return;
-
-  const message = parseJSON<ModelMessage>(existing.message);
-  if (!message) return;
-
-  // Update the content field in the ModelMessage
-  const updated: ModelMessage = { ...message, content } as ModelMessage;
-
-  await db
-    .update(aiMessagesTable)
-    .set({ message: JSON.stringify(updated) })
-    .where(
-      and(
-        eq(aiMessagesTable.id, messageId),
-        eq(aiMessagesTable.conversation_id, conversationId)
-      )
-    );
-}
-
-/**
- * Update metadata for a specific message (e.g. to attach usage/finishReason).
- */
-export async function updateMessageMetadata(
-  messageId: number,
-  conversationId: number,
-  metadata: unknown
+export async function updateMessageRow(
+  dbId: number,
+  uiMessage: UIMessage
 ): Promise<void> {
   await db
     .update(aiMessagesTable)
-    .set({ metadata: serializeJSON(metadata) })
-    .where(
-      and(
-        eq(aiMessagesTable.id, messageId),
-        eq(aiMessagesTable.conversation_id, conversationId)
-      )
-    );
+    .set({
+      message: JSON.stringify(uiMessage),
+      role: uiMessage.role,
+    })
+    .where(eq(aiMessagesTable.id, dbId));
 }

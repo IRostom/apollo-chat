@@ -19,25 +19,42 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar'
-import { useDeleteConversation } from '@/queries/useDeleteConversation'
+import { useDeleteConversation, useDeleteV1Conversation } from '@/queries/useDeleteConversation'
 import { toast } from 'vue-sonner'
+import { computed } from 'vue'
 
-defineProps<{
-  chats: {
-    title: string
-    id: string | number
-  }[]
-}>()
+const props = withDefaults(
+  defineProps<{
+    chats: {
+      title: string
+      id: string | number
+    }[]
+    routePrefix?: string
+  }>(),
+  {
+    routePrefix: '/',
+  },
+)
 
 const { isMobile } = useSidebar()
 const route = useRoute()
 const router = useRouter()
 const confirmDeleteChatId = ref<string | null>(null)
 
+const isV1 = computed(() => props.routePrefix === '/v1/')
+
 const {
-  mutate: deleteConversationMutation,
-  isPending: isDeletingConversation,
+  mutate: deleteStdMutation,
+  isPending: isDeletingStd,
 } = useDeleteConversation()
+
+const {
+  mutate: deleteV1Mutation,
+  isPending: isDeletingV1,
+} = useDeleteV1Conversation()
+
+const deleteConversationMutation = computed(() => isV1.value ? deleteV1Mutation : deleteStdMutation)
+const isDeletingConversation = computed(() => isDeletingStd.value || isDeletingV1.value)
 
 function handleDeleteClick(chatId: string) {
   confirmDeleteChatId.value = chatId
@@ -45,7 +62,9 @@ function handleDeleteClick(chatId: string) {
 
 function handleDeleteSuccess(conversationId: string) {
   if (route.params.id?.toString() === conversationId) {
-    router.push('/')
+    // Navigate to the base route (either / or /v1)
+    const base = props.routePrefix === '/v1/' ? '/v1' : '/'
+    router.push(base)
   }
   if (confirmDeleteChatId.value === conversationId) {
     confirmDeleteChatId.value = null
@@ -65,7 +84,7 @@ function handleDeleteError(error: Error) {
     <SidebarMenu>
       <SidebarMenuItem v-for="chat in chats" :key="chat.id">
         <SidebarMenuButton as-child :is-active="chat.id.toString() === route.params.id">
-          <RouterLink :to="'/' + chat.id">
+          <RouterLink :to="props.routePrefix + chat.id">
             <span>{{ chat.title }}</span>
           </RouterLink>
         </SidebarMenuButton>
@@ -93,7 +112,7 @@ function handleDeleteError(error: Error) {
           :is-deleting="isDeletingConversation"
           @update:open="(isOpen) => (confirmDeleteChatId = isOpen ? chat.id.toString() : null)" @confirm="
             deleteConversationMutation(chat.id.toString(), {
-              onSuccess: (_data, conversationId) => handleDeleteSuccess(conversationId),
+              onSuccess: (_data: any, conversationId: string) => handleDeleteSuccess(conversationId),
               onError: handleDeleteError,
             })
             " />

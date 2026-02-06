@@ -1,4 +1,3 @@
-import { tool } from "ai";
 import { z } from "zod";
 import { ollama } from "ai-sdk-ollama";
 import {
@@ -10,7 +9,7 @@ import {
  * Code execution tool - runs JavaScript or Python code in an isolated Docker container
  * Available for all providers
  */
-export const runCodeTool = tool({
+export const runCodeTool = {
   description:
     "Runs JavaScript or Python code in an isolated container and returns the output. Use this tool when you need to execute code, perform calculations, or process data.",
   inputSchema: z.object({
@@ -19,16 +18,22 @@ export const runCodeTool = tool({
       .describe("The programming language to execute"),
     code: z.string().describe("The code to execute"),
   }),
-  execute: async ({ language, code }) => {
+  execute: async ({
+    language,
+    code,
+  }: {
+    language: "javascript" | "python";
+    code: string;
+  }) => {
     return runCodeInContainer(language as CodeLanguage, code);
   },
-});
+};
 
 /**
  * Web search tool from ai-sdk-ollama
  * Available for ALL providers (uses Ollama's web API regardless of chat provider)
  */
-export const webSearchTool = ollama.tools.webSearch({ maxResults: 5 });
+export const webSearchTool = ollama.tools.webSearch();
 
 /**
  * Web fetch tool from ai-sdk-ollama

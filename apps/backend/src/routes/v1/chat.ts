@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { body, validationResult } from "express-validator";
-import { streamText, stepCountIs } from "ai";
-import type { ModelMessage } from "ai";
+import { streamText, convertToModelMessages, stepCountIs } from "ai";
+import type { UIMessage } from "ai";
 import {
   getModel,
   isProviderConfigured,
@@ -11,13 +11,11 @@ import { getEnabledTools } from "../../tools/sdkTools";
 import {
   createAIConversation,
   getAIConversation,
-  addAIMessage,
-  addAIMessages,
-  loadAIMessagesAsModelMessages,
-  getAIMessageById,
-  getAIMessages,
-  deleteAIMessagesAfter,
-  updateAIMessageContent,
+  saveUIMessage,
+  loadUIMessages,
+  getMessageRows,
+  deleteMessageRowsFrom,
+  updateMessageRow,
 } from "../../services/aiChat";
 
 const router = Router();
@@ -31,36 +29,38 @@ type ResponseFormat = "ui" | "text";
 interface ChatRequestBody {
   provider: Provider;
   model: string;
-  message: {
-    role: "user";
-    content: string;
-    attachments?: unknown[];
-  };
+  /** Full UIMessage from the frontend Chat class */
+  message: UIMessage;
   conversationId?: string;
   systemPrompt?: string;
   enableWebTools?: boolean;
   enableCodeTools?: boolean;
+  enableThinking?: boolean;
   responseFormat?: ResponseFormat;
 }
 
 interface RetryRequestBody {
   provider: Provider;
   model: string;
-  messageId: number;
+  /** UIMessage ID (string) of the assistant message to retry */
+  messageId: string;
   conversationId: string;
   enableWebTools?: boolean;
   enableCodeTools?: boolean;
+  enableThinking?: boolean;
   responseFormat?: ResponseFormat;
 }
 
 interface EditRequestBody {
   provider: Provider;
   model: string;
-  messageId: number;
+  /** UIMessage ID (string) of the user message to edit */
+  messageId: string;
   conversationId: string;
   content: string;
   enableWebTools?: boolean;
   enableCodeTools?: boolean;
+  enableThinking?: boolean;
   responseFormat?: ResponseFormat;
 }
 
@@ -78,15 +78,14 @@ const chatValidation = [
   body("message.role")
     .equals("user")
     .withMessage("Message role must be 'user'"),
-  body("message.content")
-    .isString()
-    .notEmpty()
-    .withMessage("Message content is required"),
-  body("message.attachments").optional().isArray(),
+  body("message.parts")
+    .isArray()
+    .withMessage("Message parts must be an array"),
   body("conversationId").optional().isString(),
   body("systemPrompt").optional().isString(),
   body("enableWebTools").optional().isBoolean(),
   body("enableCodeTools").optional().isBoolean(),
+  body("enableThinking").optional().isBoolean(),
   body("responseFormat")
     .optional()
     .isIn(["ui", "text"])
@@ -100,14 +99,16 @@ const retryValidation = [
     .withMessage("Provider must be one of: openai, google, anthropic, ollama"),
   body("model").isString().notEmpty().withMessage("Model is required"),
   body("messageId")
-    .isInt({ min: 1 })
-    .withMessage("messageId must be a positive integer"),
+    .isString()
+    .notEmpty()
+    .withMessage("messageId is required"),
   body("conversationId")
     .isString()
     .notEmpty()
     .withMessage("conversationId is required"),
   body("enableWebTools").optional().isBoolean(),
   body("enableCodeTools").optional().isBoolean(),
+  body("enableThinking").optional().isBoolean(),
   body("responseFormat")
     .optional()
     .isIn(["ui", "text"])
@@ -121,8 +122,9 @@ const editValidation = [
     .withMessage("Provider must be one of: openai, google, anthropic, ollama"),
   body("model").isString().notEmpty().withMessage("Model is required"),
   body("messageId")
-    .isInt({ min: 1 })
-    .withMessage("messageId must be a positive integer"),
+    .isString()
+    .notEmpty()
+    .withMessage("messageId is required"),
   body("conversationId")
     .isString()
     .notEmpty()
@@ -130,6 +132,7 @@ const editValidation = [
   body("content").isString().notEmpty().withMessage("content is required"),
   body("enableWebTools").optional().isBoolean(),
   body("enableCodeTools").optional().isBoolean(),
+  body("enableThinking").optional().isBoolean(),
   body("responseFormat")
     .optional()
     .isIn(["ui", "text"])
@@ -137,31 +140,15 @@ const editValidation = [
 ];
 
 // ============================================================================
-// Helper Functions
-// ============================================================================
-
-/**
- * Pipe the AI SDK stream to the Express response using built-in methods
- */
-function pipeStreamToResponse(
-  result: any,
-  res: Response,
-  responseFormat: ResponseFormat
-): void {
-  if (responseFormat === "text") {
-    result.pipeTextStreamToResponse(res);
-  } else {
-    result.pipeUIMessageStreamToResponse(res);
-  }
-}
-
-// ============================================================================
 // Routes
 // ============================================================================
 
 /**
  * POST /api/v1/chat
- * Stream a chat response from any supported AI provider
+ *
+ * Receives the last user UIMessage from the frontend Chat class,
+ * loads previous messages from DB, converts to ModelMessages for the model,
+ * streams the response, and persists both the user and assistant UIMessages.
  */
 router.post("/", chatValidation, async (req: Request, res: Response) => {
   const errors = validationResult(req);
@@ -177,10 +164,10 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
     systemPrompt,
     enableWebTools = false,
     enableCodeTools = false,
+    enableThinking = false,
     responseFormat = "ui",
   } = req.body as ChatRequestBody;
 
-  // Check if provider is configured
   if (!isProviderConfigured(provider)) {
     return res.status(400).json({
       error: `Provider '${provider}' is not configured. Please set the required API key.`,
@@ -190,10 +177,17 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
   let convId = conversationId ? parseInt(conversationId, 10) : null;
 
   try {
-    // Create or get conversation
+    // Create conversation if needed
     if (!convId) {
+      const titleText =
+        message.parts
+          ?.filter((p: any) => p.type === "text")
+          .map((p: any) => p.text)
+          .join("")
+          .slice(0, 50) || "New Chat";
+
       convId = await createAIConversation({
-        title: message.content.slice(0, 50),
+        title: titleText,
         provider,
         model,
         system_prompt: systemPrompt,
@@ -201,50 +195,31 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
       console.log("New AI conversation created:", convId);
     }
 
-    // Load existing messages
-    const messages = convId ? await loadAIMessagesAsModelMessages(convId) : [];
+    // Load existing UIMessages from DB
+    const previousMessages = await loadUIMessages(convId);
 
-    // Save user message as a ModelMessage to the database
-    const userMessage: ModelMessage = {
-      role: "user",
-      content: message.content,
-    };
-    await addAIMessage(convId, userMessage);
+    // Save the new user UIMessage to DB
+    await saveUIMessage(convId, message);
 
-    // Add user message to messages array for the API call
-    messages.push(userMessage);
+    // Combine all messages
+    const allMessages = [...previousMessages, message];
 
-    // Get enabled tools
+    // Convert UIMessages → ModelMessages for the model
+    const modelMessages = await convertToModelMessages(allMessages);
+
+    // Get tools and model instance
     const tools = getEnabledTools({ enableCodeTools, enableWebTools });
+    const modelInstance = getModel(provider, model, { think: enableThinking });
 
-    // Get the model instance
-    const modelInstance = getModel(provider, model);
-
-    // Store convId for use in callbacks
     const conversationIdForCallback = convId;
 
     // Stream the response
     const result = streamText({
       model: modelInstance as any,
-      messages: messages as any,
+      messages: modelMessages as any,
       system: systemPrompt,
       tools: Object.keys(tools).length > 0 ? tools : undefined,
       stopWhen: stepCountIs(10),
-      onFinish: async ({ usage, finishReason, response }) => {
-        // Save all response messages (assistant + tool) directly from the SDK
-        await addAIMessages(
-          conversationIdForCallback,
-          response.messages,
-          { usage, finishReason }
-        );
-
-        console.log("Chat completed:", {
-          convId: conversationIdForCallback,
-          finishReason,
-          usage,
-          responseMessages: response.messages.length,
-        });
-      },
       onError: ({ error }) => {
         console.error("Stream error:", error);
       },
@@ -255,8 +230,32 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
       res.setHeader("X-Conversation-Id", convId.toString());
     }
 
-    // Pipe the stream to the response using AI SDK helpers
-    pipeStreamToResponse(result, res, responseFormat);
+    if (responseFormat === "text") {
+      result.pipeTextStreamToResponse(res);
+    } else {
+      // Pipe UI message stream with persistence in onFinish
+      result.pipeUIMessageStreamToResponse(res, {
+        sendReasoning: true,
+        sendSources: true,
+        originalMessages: allMessages,
+        onFinish: async ({ responseMessage, finishReason }) => {
+          const usage = await result.usage;
+          await saveUIMessage(conversationIdForCallback, responseMessage, {
+            usage,
+            finishReason,
+          });
+          console.log("Chat completed:", {
+            convId: conversationIdForCallback,
+            finishReason,
+            usage,
+          });
+        },
+      });
+    }
+
+    // Ensure the stream runs to completion even if the client disconnects.
+    // This guarantees the onFinish callback fires and messages are persisted.
+    result.consumeStream();
   } catch (err) {
     console.error("Chat error:", err);
     if (!res.headersSent) {
@@ -269,7 +268,8 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
 
 /**
  * POST /api/v1/chat/retry
- * Retry the last assistant message
+ * Retry the last assistant message.
+ * Deletes the assistant message (and everything after it) and regenerates.
  */
 router.post("/retry", retryValidation, async (req: Request, res: Response) => {
   const errors = validationResult(req);
@@ -284,12 +284,12 @@ router.post("/retry", retryValidation, async (req: Request, res: Response) => {
     conversationId,
     enableWebTools = false,
     enableCodeTools = false,
+    enableThinking = false,
     responseFormat = "ui",
   } = req.body as RetryRequestBody;
 
   const convId = parseInt(conversationId, 10);
 
-  // Check if provider is configured
   if (!isProviderConfigured(provider)) {
     return res.status(400).json({
       error: `Provider '${provider}' is not configured. Please set the required API key.`,
@@ -297,79 +297,68 @@ router.post("/retry", retryValidation, async (req: Request, res: Response) => {
   }
 
   try {
-    // Verify the message exists and is an assistant message
-    const message = await getAIMessageById(messageId, convId);
-    if (!message) {
+    // Load message rows with DB IDs
+    const rows = await getMessageRows(convId);
+    const targetIdx = rows.findIndex((r) => r.uiMessage.id === messageId);
+
+    if (targetIdx === -1) {
       return res.status(404).json({ error: "Message not found" });
     }
-    if (message.role !== "assistant") {
+    if (rows[targetIdx].uiMessage.role !== "assistant") {
       return res
         .status(400)
         .json({ error: "Can only retry assistant messages" });
     }
 
-    // Find the user message before this assistant message
-    const allMessages = await getAIMessages(convId);
-    const messageIndex = allMessages.findIndex((m) => m.id === messageId);
-    if (messageIndex === -1) {
-      return res
-        .status(404)
-        .json({ error: "Message not found in conversation" });
-    }
+    // Delete the assistant message and everything after it
+    await deleteMessageRowsFrom(convId, rows[targetIdx].dbId);
 
-    // Find the preceding user message
-    let userMessageId: number | null = null;
-    for (let i = messageIndex - 1; i >= 0; i--) {
-      if (allMessages[i].role === "user") {
-        userMessageId = allMessages[i].id;
-        break;
-      }
-    }
-
-    if (!userMessageId) {
-      return res
-        .status(400)
-        .json({ error: "No user message found before assistant message" });
-    }
-
-    // Delete all messages after the user message
-    await deleteAIMessagesAfter(convId, userMessageId);
-
-    // Load remaining messages
-    const messages = await loadAIMessagesAsModelMessages(convId);
+    // Remaining messages
+    const remainingMessages = rows
+      .slice(0, targetIdx)
+      .map((r) => r.uiMessage);
 
     // Get conversation for system prompt
     const conversation = await getAIConversation(convId);
 
-    // Get enabled tools
-    const tools = getEnabledTools({ enableCodeTools, enableWebTools });
+    // Convert to model messages
+    const modelMessages = await convertToModelMessages(remainingMessages);
 
-    // Get the model instance
-    const modelInstance = getModel(provider, model);
+    // Get tools and model
+    const tools = getEnabledTools({ enableCodeTools, enableWebTools });
+    const modelInstance = getModel(provider, model, { think: enableThinking });
 
     // Stream the response
     const result = streamText({
       model: modelInstance as any,
-      messages: messages as any,
+      messages: modelMessages as any,
       system: conversation?.system_prompt ?? undefined,
       tools: Object.keys(tools).length > 0 ? tools : undefined,
       stopWhen: stepCountIs(10),
-      onFinish: async ({ usage, finishReason, response }) => {
-        // Save all response messages directly from the SDK
-        await addAIMessages(convId, response.messages, {
-          usage,
-          finishReason,
-        });
-
-        console.log("Retry completed:", { convId, finishReason, usage });
-      },
       onError: ({ error }) => {
         console.error("Stream error:", error);
       },
     });
 
-    // Pipe the stream to the response using AI SDK helpers
-    pipeStreamToResponse(result, res, responseFormat);
+    if (responseFormat === "text") {
+      result.pipeTextStreamToResponse(res);
+    } else {
+      result.pipeUIMessageStreamToResponse(res, {
+        sendReasoning: true,
+        sendSources: true,
+        originalMessages: remainingMessages,
+        onFinish: async ({ responseMessage, finishReason }) => {
+          const usage = await result.usage;
+          await saveUIMessage(convId, responseMessage, {
+            usage,
+            finishReason,
+          });
+          console.log("Retry completed:", { convId, finishReason, usage });
+        },
+      });
+    }
+
+    result.consumeStream();
   } catch (err) {
     console.error("Retry error:", err);
     if (!res.headersSent) {
@@ -382,7 +371,8 @@ router.post("/retry", retryValidation, async (req: Request, res: Response) => {
 
 /**
  * POST /api/v1/chat/edit
- * Edit a user message and regenerate the response
+ * Edit a user message and regenerate the response.
+ * Updates the user message content, deletes everything after it, and regenerates.
  */
 router.post("/edit", editValidation, async (req: Request, res: Response) => {
   const errors = validationResult(req);
@@ -398,12 +388,12 @@ router.post("/edit", editValidation, async (req: Request, res: Response) => {
     content,
     enableWebTools = false,
     enableCodeTools = false,
+    enableThinking = false,
     responseFormat = "ui",
   } = req.body as EditRequestBody;
 
   const convId = parseInt(conversationId, 10);
 
-  // Check if provider is configured
   if (!isProviderConfigured(provider)) {
     return res.status(400).json({
       error: `Provider '${provider}' is not configured. Please set the required API key.`,
@@ -411,56 +401,76 @@ router.post("/edit", editValidation, async (req: Request, res: Response) => {
   }
 
   try {
-    // Verify the message exists and is a user message
-    const message = await getAIMessageById(messageId, convId);
-    if (!message) {
+    // Load message rows with DB IDs
+    const rows = await getMessageRows(convId);
+    const targetIdx = rows.findIndex((r) => r.uiMessage.id === messageId);
+
+    if (targetIdx === -1) {
       return res.status(404).json({ error: "Message not found" });
     }
-    if (message.role !== "user") {
+    if (rows[targetIdx].uiMessage.role !== "user") {
       return res.status(400).json({ error: "Can only edit user messages" });
     }
 
-    // Update the message content
-    await updateAIMessageContent(messageId, convId, content);
+    // Update the user message content
+    const updatedMessage: UIMessage = {
+      ...rows[targetIdx].uiMessage,
+      parts: [{ type: "text" as const, text: content }],
+    };
+    await updateMessageRow(rows[targetIdx].dbId, updatedMessage);
 
-    // Delete all messages after this user message
-    await deleteAIMessagesAfter(convId, messageId);
+    // Delete everything after the edited message
+    if (targetIdx + 1 < rows.length) {
+      await deleteMessageRowsFrom(convId, rows[targetIdx + 1].dbId);
+    }
 
-    // Load remaining messages (including the edited one)
-    const messages = await loadAIMessagesAsModelMessages(convId);
+    // Remaining messages
+    const remainingMessages = [
+      ...rows.slice(0, targetIdx).map((r) => r.uiMessage),
+      updatedMessage,
+    ];
 
     // Get conversation for system prompt
     const conversation = await getAIConversation(convId);
 
-    // Get enabled tools
-    const tools = getEnabledTools({ enableCodeTools, enableWebTools });
+    // Convert to model messages
+    const modelMessages = await convertToModelMessages(remainingMessages);
 
-    // Get the model instance
-    const modelInstance = getModel(provider, model);
+    // Get tools and model
+    const tools = getEnabledTools({ enableCodeTools, enableWebTools });
+    const modelInstance = getModel(provider, model, { think: enableThinking });
 
     // Stream the response
     const result = streamText({
       model: modelInstance as any,
-      messages: messages as any,
+      messages: modelMessages as any,
       system: conversation?.system_prompt ?? undefined,
       tools: Object.keys(tools).length > 0 ? tools : undefined,
       stopWhen: stepCountIs(10),
-      onFinish: async ({ usage, finishReason, response }) => {
-        // Save all response messages directly from the SDK
-        await addAIMessages(convId, response.messages, {
-          usage,
-          finishReason,
-        });
-
-        console.log("Edit completed:", { convId, finishReason, usage });
-      },
       onError: ({ error }) => {
         console.error("Stream error:", error);
       },
     });
 
-    // Pipe the stream to the response using AI SDK helpers
-    pipeStreamToResponse(result, res, responseFormat);
+    if (responseFormat === "text") {
+      result.pipeTextStreamToResponse(res);
+    } else {
+      result.pipeUIMessageStreamToResponse(res, {
+        sendReasoning: true,
+        sendSources: true,
+        originalMessages: remainingMessages,
+        onFinish: async ({ responseMessage, finishReason }) => {
+          const usage = await result.usage;
+          await saveUIMessage(convId, responseMessage, {
+            usage,
+            finishReason,
+          });
+          console.log("Edit completed:", { convId, finishReason, usage });
+        },
+      });
+    }
+
+    result.consumeStream();
   } catch (err) {
     console.error("Edit error:", err);
     if (!res.headersSent) {

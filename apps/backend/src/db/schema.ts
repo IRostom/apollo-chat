@@ -68,8 +68,8 @@ export const aiMessagesTable = sqliteTable("ai_messages", {
   conversation_id: int()
     .notNull()
     .references(() => aiConversationsTable.id),
-  role: text().notNull(), // 'user' | 'assistant' | 'tool' — kept for query convenience
-  message: text().notNull(), // JSON-serialized ModelMessage from AI SDK
+  role: text().notNull(), // 'user' | 'assistant' — from UIMessage.role
+  message: text().notNull(), // JSON-serialized UIMessage from AI SDK
   metadata: text(), // JSON string for usage stats, finish reason, etc.
   created_at: text()
     .notNull()
