@@ -23,29 +23,19 @@ export const MODEL_CATALOG: { providers: ProviderConfig[] } = {
       label: "OpenAI",
       models: [
         {
-          name: "gpt-4o",
-          label: "GPT-4o",
-          capabilities: { vision: true, tools: true, thinking: false },
+          name: 'gpt-5',
+          label: 'GPT-5',
+          capabilities: { vision: true, tools: true, thinking: true },
         },
         {
-          name: "gpt-4o-mini",
-          label: "GPT-4o Mini",
-          capabilities: { vision: true, tools: true, thinking: false },
+          name: "gpt-5-mini",
+          label: "GPT-5 Mini",
+          capabilities: { vision: true, tools: true, thinking: true },
         },
         {
-          name: "gpt-4-turbo",
-          label: "GPT-4 Turbo",
-          capabilities: { vision: false, tools: true, thinking: false },
-        },
-        {
-          name: "gpt-4",
-          label: "GPT-4",
-          capabilities: { vision: false, tools: true, thinking: false },
-        },
-        {
-          name: "gpt-3.5-turbo",
-          label: "GPT-3.5 Turbo",
-          capabilities: { vision: false, tools: true, thinking: false },
+          name: "gpt-5-nano",
+          label: "GPT-5 Nano",
+          capabilities: { vision: true, tools: true, thinking: true },
         },
       ],
     },

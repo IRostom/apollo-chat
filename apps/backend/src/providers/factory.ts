@@ -1,4 +1,4 @@
-import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAI, openai } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOllama, ollama } from "ai-sdk-ollama";
@@ -45,7 +45,7 @@ export interface ModelOptions {
 export function getModel(provider: Provider, modelId: string, options?: ModelOptions) {
   switch (provider) {
     case "openai":
-      return openaiProvider(modelId);
+      return openai(modelId);
     case "google":
       return googleProvider(modelId);
     case "anthropic":
