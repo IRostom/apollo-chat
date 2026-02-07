@@ -18,11 +18,11 @@
     "format": "prettier --write --experimental-cli src/"
   },
   "dependencies": {
-    "@ai-sdk/vue": "^3.0.73",
+    "@ai-sdk/vue": "^3.0.75",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/vue-query": "^5.92.1",
     "@vueuse/core": "^14.1.0",
-    "ai": "^6.0.73",
+    "ai": "^6.0.75",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "highlight.js": "^11.11.1",

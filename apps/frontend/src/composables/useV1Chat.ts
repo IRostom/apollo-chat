@@ -123,7 +123,7 @@ export function useV1Chat() {
   const chatRef = shallowRef<Chat<UIMessage>>(
     new Chat<UIMessage>({
       transport,
-      onError: ({ error }) => {
+      onError: (error: unknown) => {
         console.error('V1 Chat error:', error)
         toast.error('Chat error', {
           description: error instanceof Error ? error.message : 'An error occurred',
