@@ -2,46 +2,9 @@
  * Chat-related type definitions
  */
 
-export interface ChatMessageServer {
-  role: 'user' | 'assistant' | 'system' | 'tool'
-  content: string
-  id?: number
-  thinking?: string
-  tool_name?: string
-  tool_calls?: string
-  images?: string[]
-  metadata?: string
-}
-
-export interface ChatMessageMetadata {
-  total_duration?: number
-  load_duration?: number
-  prompt_eval_count?: number
-  prompt_eval_duration?: number
-  eval_count?: number
-  eval_duration?: number
-  done?: boolean
-  done_reason?: string
-  model?: string
-}
-
-export interface ChatMessage {
-  role: 'user' | 'assistant' | 'system' | 'tool'
-  content: string
-  id?: number
-  thinking?: string
-  toolName?: string
-  codeLanguage?: string
-  codeContent?: string
-  images?: number[] | string[]
-  isError?: boolean
-  metadata?: ChatMessageMetadata
-}
-
 export interface Conversation {
   id: string
   title: string
-  messages?: ChatMessage[]
   createdAt?: string
   updatedAt?: string
 }
@@ -70,53 +33,6 @@ export interface ProviderInfo {
 
 export interface ProvidersResponse {
   providers: ProviderInfo[]
-}
-
-export type StreamFrameType =
-  | 'start'
-  | 'conversationId'
-  | 'token'
-  | 'end'
-  | 'error'
-  | 'toolName'
-  | 'toolValue'
-  | 'codeLanguage'
-  | 'codeContent'
-  | 'thinking'
-  | 'isThinking'
-  | 'role'
-  | 'invalidate'
-
-export interface StreamFrame {
-  type: StreamFrameType
-  value?: string | boolean
-  message?: string
-}
-
-export interface SendMessageOptions {
-  model: string
-  message: ChatMessage
-  conversationId?: string
-  think?: boolean
-  webTools?: boolean
-  images?: ChatFile[]
-}
-
-export interface RetryMessageOptions {
-  messageId: number
-  conversationId: string
-  model: string
-  think?: boolean
-  webTools?: boolean
-}
-
-export interface EditMessageOptions {
-  messageId: number
-  conversationId: string
-  content: string
-  model: string
-  think?: boolean
-  webTools?: boolean
 }
 
 export interface ChatFile {

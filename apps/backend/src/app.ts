@@ -1,8 +1,6 @@
 import express, { Express } from "express";
 import "dotenv/config";
 import corsMiddleware from "./plugins/cors";
-import chatRouter from "./routes/chat";
-import conversationRouter from "./routes/conversation";
 import ollamaRouter from "./routes/ollamaRouter";
 import uploadRouter from "./routes/upload";
 import transcribeRouter from "./routes/transcribe";
@@ -35,8 +33,6 @@ app.use(express.json());
 app.use(corsMiddleware);
 
 // Routes
-app.use("/", chatRouter);
-app.use("/", conversationRouter);
 app.use("/", ollamaRouter);
 app.use("/", uploadRouter);
 app.use("/", transcribeRouter);

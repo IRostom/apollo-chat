@@ -19,9 +19,8 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar'
-import { useDeleteConversation, useDeleteV1Conversation } from '@/queries/useDeleteConversation'
+import { useDeleteConversation } from '@/queries/useDeleteConversation'
 import { toast } from 'vue-sonner'
-import { computed } from 'vue'
 
 const props = withDefaults(
   defineProps<{
@@ -41,20 +40,10 @@ const route = useRoute()
 const router = useRouter()
 const confirmDeleteChatId = ref<string | null>(null)
 
-const isV1 = computed(() => props.routePrefix === '/v1/')
-
 const {
-  mutate: deleteStdMutation,
-  isPending: isDeletingStd,
+  mutate: deleteConversationMutation,
+  isPending: isDeletingConversation,
 } = useDeleteConversation()
-
-const {
-  mutate: deleteV1Mutation,
-  isPending: isDeletingV1,
-} = useDeleteV1Conversation()
-
-const deleteConversationMutation = computed(() => isV1.value ? deleteV1Mutation : deleteStdMutation)
-const isDeletingConversation = computed(() => isDeletingStd.value || isDeletingV1.value)
 
 function handleDeleteClick(chatId: string) {
   confirmDeleteChatId.value = chatId
@@ -62,9 +51,8 @@ function handleDeleteClick(chatId: string) {
 
 function handleDeleteSuccess(conversationId: string) {
   if (route.params.id?.toString() === conversationId) {
-    // Navigate to the base route (either / or /v1)
-    const base = props.routePrefix === '/v1/' ? '/v1' : '/'
-    router.push(base)
+    // Navigate to the base route
+    router.push('/')
   }
   if (confirmDeleteChatId.value === conversationId) {
     confirmDeleteChatId.value = null

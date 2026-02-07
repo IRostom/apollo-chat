@@ -112,7 +112,7 @@ export function useV1Chat() {
         chatConversationId.value = convId
         navigateToConversation(convId)
         // Invalidate v1 chats list to show in sidebar
-        queryClient.invalidateQueries({ queryKey: ['v1-chats'] })
+        queryClient.invalidateQueries({ queryKey: ['chats'] })
       }
 
       return response

@@ -1,6 +1,6 @@
 /**
  * V1 Conversation Route Composable
- * Handles conversation ID from route and navigation for /v1 routes
+ * Handles conversation ID from root routes
  */
 
 import { computed } from 'vue'
@@ -21,7 +21,7 @@ export function useV1ConversationRoute() {
    * Navigate to a v1 conversation
    */
   function navigateToConversation(id: string) {
-    router.replace(`/v1/${id}`)
+    router.replace(`/${id}`)
   }
 
   return {
