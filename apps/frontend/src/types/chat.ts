@@ -38,7 +38,8 @@ export interface ProvidersResponse {
 export interface ChatFile {
   file: File
   isUploaded: boolean
-  id?: number
-  path?: string
+  id?: string
+  key?: string
+  url?: string
   isError: boolean
 }

@@ -10,7 +10,7 @@
  */
 
 import { Chat } from '@ai-sdk/vue'
-import { DefaultChatTransport, validateUIMessages, type UIMessage } from 'ai'
+import { DefaultChatTransport, validateUIMessages, type FileUIPart, type UIMessage } from 'ai'
 import { computed, ref, shallowRef, watch } from 'vue'
 import { useV1ConversationRoute } from './useV1ConversationRoute'
 import { useAppStore } from '@/stores/app'
@@ -18,6 +18,7 @@ import { getApiUrl, API_CONFIG } from '@/config/api'
 import { useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { getV1ConversationMessages } from '@/api/chatService'
+import type { ChatFile } from '@/types/chat'
 
 /**
  * V1 Chat state and operations
@@ -147,17 +148,40 @@ export function useV1Chat() {
   /**
    * Send a message to the chat
    */
-  async function sendMessage(text: string) {
+  async function sendMessage(text: string, files?: ChatFile[]) {
     if (!appStore.userSelectedModel) {
       toast.error('No model selected', {
         description: 'Please select a model before sending a message.',
       })
-      return
+      return false
     }
 
-    if (!text.trim()) return
+    if (!text.trim() && (!files || files.length === 0)) return false
 
-    await chat.sendMessage({ text })
+    const uploadedFiles =
+      files?.filter((file) => file.isUploaded && !file.isError && (file.key || file.url)) ?? []
+
+    if (files?.length && uploadedFiles.length === 0) {
+      toast.error('Files are still uploading', {
+        description: 'Please wait for the upload to finish before sending.',
+      })
+      return false
+    }
+
+    const fileParts: FileUIPart[] = uploadedFiles.map((file) => ({
+      type: 'file',
+      filename: file.file.name,
+      mediaType: file.file.type || 'application/octet-stream',
+      url: file.key ?? file.url!,
+    }))
+
+    if (fileParts.length > 0) {
+      await chat.sendMessage({ text, files: fileParts })
+    } else {
+      await chat.sendMessage({ text })
+    }
+
+    return true
   }
 
   /**

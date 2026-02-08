@@ -1,10 +1,10 @@
 export interface uploadedFile {
   message: string
-  id: number
-  filename: string
+  id: string
+  key: string
   originalname: string
   size: string
-  path: string
+  url?: string
   type: string
   created_at: string
 }

@@ -2,9 +2,11 @@ import { int, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 export const filesTable = sqliteTable("files_table", {
-  id: int().primaryKey({ autoIncrement: true }),
-  filename: text().notNull(),
-  path: text().notNull(),
+  id: text()
+    .primaryKey()
+    .notNull()
+    .default(sql`(lower(hex(randomblob(16))))`),
+  key: text().notNull(),
   type: text(),
   created_at: text()
     .notNull()
@@ -13,6 +15,36 @@ export const filesTable = sqliteTable("files_table", {
     .notNull()
     .default(sql`(current_timestamp)`)
     .$onUpdate(() => sql`(current_timestamp)`),
+});
+
+export const conversationsTable = sqliteTable("conversations_table", {
+  id: int().primaryKey({ autoIncrement: true }),
+  title: text().notNull(),
+  model: text().notNull(),
+  created_at: text()
+    .notNull()
+    .default(sql`(current_timestamp)`),
+  updated_at: text()
+    .notNull()
+    .default(sql`(current_timestamp)`),
+});
+
+export const messagesTable = sqliteTable("messages_table", {
+  id: int().primaryKey({ autoIncrement: true }),
+  conversation_id: int().references(() => conversationsTable.id),
+  content: text().notNull(),
+  thinking: text(),
+  tool_calls: text(),
+  tool_name: text(),
+  role: text().notNull(),
+  created_at: text()
+    .notNull()
+    .default(sql`(current_timestamp)`),
+  updated_at: text()
+    .notNull()
+    .default(sql`(current_timestamp)`),
+  images: text(),
+  metadata: text(),
 });
 
 // AI SDK tables for the new v1 chat API

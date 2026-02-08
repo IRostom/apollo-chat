@@ -10,7 +10,8 @@ export function useUploadFile() {
       file,
       isUploaded: false,
       id: undefined,
-      path: undefined,
+      key: undefined,
+      url: undefined,
       isError: false,
     }
     files.value.push(newFile)
@@ -23,7 +24,8 @@ export function useUploadFile() {
         files.value[index] = {
           ...newFile,
           id: res.id,
-          path: res.path,
+          key: res.key,
+          url: res.url,
           isUploaded: true,
           isError: false,
         }

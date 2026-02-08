@@ -17,6 +17,7 @@ import {
   deleteMessageRowsFrom,
   updateMessageRow,
 } from "../../services/aiChat";
+import { expandUIMessagesForProvider } from "../../services/filePartService";
 
 const router = Router();
 
@@ -85,16 +86,14 @@ const chatValidation = [
       "ollama-cloud",
     ])
     .withMessage(
-      "Provider must be one of: openai, google, anthropic, ollama, ollama-local, ollama-cloud"
+      "Provider must be one of: openai, google, anthropic, ollama, ollama-local, ollama-cloud",
     ),
   body("model").isString().notEmpty().withMessage("Model is required"),
   body("message").isObject().withMessage("Message must be an object"),
   body("message.role")
     .equals("user")
     .withMessage("Message role must be 'user'"),
-  body("message.parts")
-    .isArray()
-    .withMessage("Message parts must be an array"),
+  body("message.parts").isArray().withMessage("Message parts must be an array"),
   body("conversationId").optional().isString(),
   body("systemPrompt").optional().isString(),
   body("enableWebTools").optional().isBoolean(),
@@ -118,13 +117,10 @@ const retryValidation = [
       "ollama-cloud",
     ])
     .withMessage(
-      "Provider must be one of: openai, google, anthropic, ollama, ollama-local, ollama-cloud"
+      "Provider must be one of: openai, google, anthropic, ollama, ollama-local, ollama-cloud",
     ),
   body("model").isString().notEmpty().withMessage("Model is required"),
-  body("messageId")
-    .isString()
-    .notEmpty()
-    .withMessage("messageId is required"),
+  body("messageId").isString().notEmpty().withMessage("messageId is required"),
   body("conversationId")
     .isString()
     .notEmpty()
@@ -150,13 +146,10 @@ const editValidation = [
       "ollama-cloud",
     ])
     .withMessage(
-      "Provider must be one of: openai, google, anthropic, ollama, ollama-local, ollama-cloud"
+      "Provider must be one of: openai, google, anthropic, ollama, ollama-local, ollama-cloud",
     ),
   body("model").isString().notEmpty().withMessage("Model is required"),
-  body("messageId")
-    .isString()
-    .notEmpty()
-    .withMessage("messageId is required"),
+  body("messageId").isString().notEmpty().withMessage("messageId is required"),
   body("conversationId")
     .isString()
     .notEmpty()
@@ -238,8 +231,14 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
     // Combine all messages
     const allMessages = [...previousMessages, message];
 
+    // Expand file parts for the target provider before conversion
+    const expandedMessages = await expandUIMessagesForProvider(
+      allMessages,
+      provider,
+    );
+
     // Convert UIMessages → ModelMessages for the model
-    const modelMessages = await convertToModelMessages(allMessages);
+    const modelMessages = await convertToModelMessages(expandedMessages);
 
     // Get tools and model instance
     const tools = getEnabledTools({ enableCodeTools, enableWebTools });
@@ -352,15 +351,19 @@ router.post("/retry", retryValidation, async (req: Request, res: Response) => {
     await deleteMessageRowsFrom(convId, rows[targetIdx].dbId);
 
     // Remaining messages
-    const remainingMessages = rows
-      .slice(0, targetIdx)
-      .map((r) => r.uiMessage);
+    const remainingMessages = rows.slice(0, targetIdx).map((r) => r.uiMessage);
 
     // Get conversation for system prompt
     const conversation = await getAIConversation(convId);
 
+    // Expand file parts for the target provider before conversion
+    const expandedMessages = await expandUIMessagesForProvider(
+      remainingMessages,
+      provider,
+    );
+
     // Convert to model messages
-    const modelMessages = await convertToModelMessages(remainingMessages);
+    const modelMessages = await convertToModelMessages(expandedMessages);
 
     // Get tools and model
     const tools = getEnabledTools({ enableCodeTools, enableWebTools });
@@ -475,8 +478,14 @@ router.post("/edit", editValidation, async (req: Request, res: Response) => {
     // Get conversation for system prompt
     const conversation = await getAIConversation(convId);
 
+    // Expand file parts for the target provider before conversion
+    const expandedMessages = await expandUIMessagesForProvider(
+      remainingMessages,
+      provider,
+    );
+
     // Convert to model messages
-    const modelMessages = await convertToModelMessages(remainingMessages);
+    const modelMessages = await convertToModelMessages(expandedMessages);
 
     // Get tools and model
     const tools = getEnabledTools({ enableCodeTools, enableWebTools });

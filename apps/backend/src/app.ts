@@ -4,7 +4,6 @@ import corsMiddleware from "./plugins/cors";
 import ollamaRouter from "./routes/ollamaRouter";
 import uploadRouter from "./routes/upload";
 import transcribeRouter from "./routes/transcribe";
-import path from "path";
 import modelsRouter from "./routes/models";
 // V1 API routes (AI SDK)
 import v1ChatRouter from "./routes/v1/chat";
@@ -42,9 +41,5 @@ app.use("/", modelsRouter);
 app.use("/api/v1/chat", v1ChatRouter);
 app.use("/api/v1/conversations", v1ConversationRouter);
 app.use("/api/v1/models", v1ModelsRouter);
-
-// Serve static files from uploads directory
-const uploadDir = path.join(__dirname, "../uploads");
-app.use("/uploads", express.static(uploadDir));
 
 export default app;

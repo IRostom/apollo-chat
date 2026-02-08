@@ -3,29 +3,19 @@ import { filesTable } from "./schema";
 import { eq } from "drizzle-orm";
 
 export interface FileRecord {
-  id: number;
-  filename: string;
-  path: string;
+  id: string;
+  key: string;
   type?: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export const fileService = {
-  async createFile(
-    filename: string,
-    path: string,
-    type?: string | null,
-  ): Promise<FileRecord> {
-    // Store relative path in database
-    const uploadDir = "../../uploads/";
-    const relativePath = path.replace(uploadDir, "");
-
+  async createFile(key: string, type?: string | null): Promise<FileRecord> {
     const [file] = await db
       .insert(filesTable)
       .values({
-        filename,
-        path: relativePath,
+        key,
         type,
       })
       .returning();
@@ -33,7 +23,7 @@ export const fileService = {
     return file;
   },
 
-  async getFileById(id: number): Promise<FileRecord | null> {
+  async getFileById(id: string): Promise<FileRecord | null> {
     const file = await db
       .select()
       .from(filesTable)
@@ -47,7 +37,7 @@ export const fileService = {
     return await db.select().from(filesTable);
   },
 
-  async deleteFileById(id: number): Promise<void> {
+  async deleteFileById(id: string): Promise<void> {
     await db.delete(filesTable).where(eq(filesTable.id, id));
   },
 };

@@ -5,6 +5,7 @@ import {
   deleteAIConversation,
   getAIConversation,
 } from "../../services/aiChat";
+import { hydrateUIMessagesWithPresignedUrls } from "../../services/filePartService";
 
 const router = Router();
 
@@ -48,7 +49,8 @@ router.get("/:id/messages", async (req: Request, res: Response) => {
 
     // Load UIMessages directly from DB — no ModelMessage→UIMessage conversion
     const messages = await loadUIMessages(convId);
-    res.json(messages);
+    const hydratedMessages = await hydrateUIMessagesWithPresignedUrls(messages);
+    res.json(hydratedMessages);
   } catch (err) {
     console.error("Error fetching v1 conversation messages:", err);
     res.status(500).json({

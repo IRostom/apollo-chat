@@ -46,6 +46,12 @@ const textContent = computed(() =>
         .join(''),
 )
 
+const fileParts = computed(() =>
+  props.message.parts.filter((p): p is { type: 'file'; url: string; filename?: string; mediaType?: string } =>
+    p.type === 'file',
+  ),
+)
+
 const sourceParts = computed(() =>
     props.message.parts.filter((p) => p.type === 'source-url'),
 )
@@ -120,6 +126,25 @@ function handleRetry() {
         <Card class="w-fit ms-auto py-4">
             <CardContent>
                 <div class="whitespace-break-spaces">{{ textContent }}</div>
+                <div v-if="fileParts.length" class="mt-3 flex flex-wrap gap-2 justify-end">
+                    <template v-for="file in fileParts" :key="file.url">
+                        <img
+                            v-if="file.mediaType?.startsWith('image/')"
+                            :src="file.url"
+                            :alt="file.filename ?? 'attachment'"
+                            class="max-w-56 max-h-56 rounded-lg border"
+                        />
+                        <a
+                            v-else
+                            :href="file.url"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="text-xs border rounded-lg px-2 py-1 hover:bg-muted transition-colors no-underline"
+                        >
+                            {{ file.filename ?? 'Attachment' }}
+                        </a>
+                    </template>
+                </div>
             </CardContent>
         </Card>
         <MessageTools role="user" class="ms-auto opacity-0 group-hover:opacity-100 transition-opacity"
@@ -189,6 +214,27 @@ function handleRetry() {
 
         <!-- Main text content -->
         <div v-if="textContent" v-html="renderedContent"></div>
+
+        <!-- Assistant attachments -->
+        <div v-if="fileParts.length" class="mt-3 flex flex-wrap gap-2">
+            <template v-for="file in fileParts" :key="file.url">
+                <img
+                    v-if="file.mediaType?.startsWith('image/')"
+                    :src="file.url"
+                    :alt="file.filename ?? 'attachment'"
+                    class="max-w-56 max-h-56 rounded-lg border"
+                />
+                <a
+                    v-else
+                    :href="file.url"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="text-xs border rounded-lg px-2 py-1 hover:bg-muted transition-colors no-underline"
+                >
+                    {{ file.filename ?? 'Attachment' }}
+                </a>
+            </template>
+        </div>
 
         <!-- Error state -->
         <div v-if="!isTextStreaming && !textContent && !isLoading && !toolParts.length"
