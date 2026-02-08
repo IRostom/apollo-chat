@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import type { UIMessage } from 'ai'
+import type { UIMessage, FileUIPart } from 'ai'
 import { isToolUIPart, getToolName } from 'ai'
 import { computed } from 'vue'
 import Spinner from '@/components/ui/spinner/Spinner.vue'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { ChevronDown, ChevronUp, AlertCircle, RotateCcw, Globe } from 'lucide-vue-next'
+import { ChevronDown, ChevronUp, AlertCircle, RotateCcw, Globe, FileText } from 'lucide-vue-next'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import MessageTools from '@/components/chat/MessageTools.vue'
@@ -47,9 +47,7 @@ const textContent = computed(() =>
 )
 
 const fileParts = computed(() =>
-  props.message.parts.filter((p): p is { type: 'file'; url: string; filename?: string; mediaType?: string } =>
-    p.type === 'file',
-  ),
+  props.message.parts.filter((p): p is FileUIPart => p.type === 'file'),
 )
 
 const sourceParts = computed(() =>
@@ -134,6 +132,16 @@ function handleRetry() {
                             :alt="file.filename ?? 'attachment'"
                             class="max-w-56 max-h-56 rounded-lg border"
                         />
+                        <a
+                            v-else-if="file.mediaType === 'application/pdf'"
+                            :href="file.url"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="text-xs border rounded-lg px-2 py-1 hover:bg-muted transition-colors no-underline inline-flex items-center gap-2"
+                        >
+                            <FileText class="h-4 w-4" />
+                            {{ file.filename ?? 'PDF' }}
+                        </a>
                         <a
                             v-else
                             :href="file.url"
@@ -224,6 +232,16 @@ function handleRetry() {
                     :alt="file.filename ?? 'attachment'"
                     class="max-w-56 max-h-56 rounded-lg border"
                 />
+                <a
+                    v-else-if="file.mediaType === 'application/pdf'"
+                    :href="file.url"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="text-xs border rounded-lg px-2 py-1 hover:bg-muted transition-colors no-underline inline-flex items-center gap-2"
+                >
+                    <FileText class="h-4 w-4" />
+                    {{ file.filename ?? 'PDF' }}
+                </a>
                 <a
                     v-else
                     :href="file.url"

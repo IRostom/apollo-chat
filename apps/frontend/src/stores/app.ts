@@ -14,6 +14,8 @@ export const useAppStore = defineStore(
     const canUseWebTools = computed(() => userSelectedModel.value?.tools ?? false)
     const useWebTools = ref(false)
     const supportsVision = computed(() => userSelectedModel.value?.vision ?? false)
+    const supportsPdf = computed(() => userSelectedModel.value?.pdf ?? false)
+    const supportsAttachments = computed(() => supportsVision.value || supportsPdf.value)
 
     function updateUserSelectedModel(v: Model | undefined) {
       userSelectedModel.value = v
@@ -44,6 +46,8 @@ export const useAppStore = defineStore(
       shouldThink,
       useWebTools,
       supportsVision,
+      supportsPdf,
+      supportsAttachments,
       updateUserSelectedModel,
       updateUserSelectedProvider,
       updateUserSelectedModelFamily,

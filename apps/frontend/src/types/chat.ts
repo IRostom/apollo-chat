@@ -20,6 +20,7 @@ export interface Model {
   vision: boolean
   thinking: boolean
   tools: boolean
+  pdf: boolean
   completion?: boolean
   context_length?: number
 }

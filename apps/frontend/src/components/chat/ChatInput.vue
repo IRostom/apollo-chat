@@ -10,6 +10,8 @@ import {
   Square,
   Eye,
   Hammer,
+  FileText,
+  Paperclip,
 } from 'lucide-vue-next'
 import {
   DropdownMenu,
@@ -105,6 +107,8 @@ const userSelectedModelName = computed(() => appStore.userSelectedModelName)
 const canThink = computed(() => appStore.canThink)
 const canUseWebTools = computed(() => appStore.canUseWebTools)
 const supportsVision = computed(() => appStore.supportsVision)
+const supportsPdf = computed(() => appStore.supportsPdf)
+const supportsAttachments = computed(() => appStore.supportsAttachments)
 
 function send() {
   if (props.isStreaming || !userSelectedModelName.value?.length || !userMsg.value.trim()) {
@@ -139,6 +143,25 @@ function updateSelectedModel(model: Model) {
 // }
 
 const fileInputRef = ref<HTMLInputElement | null>(null)
+const fileAccept = computed(() => {
+  if (supportsVision.value && supportsPdf.value) return 'image/*,application/pdf'
+  if (supportsVision.value) return 'image/*'
+  if (supportsPdf.value) return 'application/pdf'
+  return 'image/*,application/pdf'
+})
+
+const attachmentIcon = computed(() => {
+  if (supportsVision.value && supportsPdf.value) return Paperclip
+  if (supportsVision.value) return Image
+  return FileText
+})
+
+const attachmentLabel = computed(() => {
+  if (supportsVision.value && supportsPdf.value) return 'Attach file'
+  if (supportsVision.value) return 'Attach image'
+  if (supportsPdf.value) return 'Attach PDF'
+  return 'Attach file'
+})
 
 function openFilePicker() {
   fileInputRef.value?.click()
@@ -148,6 +171,29 @@ function onFileChange(event: Event) {
   const files = (event.target as HTMLInputElement).files
   if (!files || !files.length) return
   const file = files[0]
+  const isImage = file.type.startsWith('image/')
+  const isPdf = file.type === 'application/pdf'
+
+  if (isImage && !supportsVision.value) {
+    toast.error('Images not supported', {
+      description: 'Please select a model that supports image inputs.',
+    })
+    return
+  }
+
+  if (isPdf && !supportsPdf.value) {
+    toast.error('PDFs not supported', {
+      description: 'Please select a model that supports PDF inputs.',
+    })
+    return
+  }
+
+  if (!isImage && !isPdf) {
+    toast.error('Unsupported file type', {
+      description: 'Only images and PDFs are supported.',
+    })
+    return
+  }
 
   if (files.length === 1) {
     emit('attach', file!)
@@ -202,7 +248,14 @@ onUnmounted(() => {
       <InputGroupAddon align="block-start">
         <div class="flex items-center justify-start gap-3">
           <div v-for="file in filesUrls" :key="file.url" class="border rounded-xl p-1">
-            <img :src="file.url" class="w-14.5 h-14.5" />
+            <img
+              v-if="file.file.type.startsWith('image/')"
+              :src="file.url"
+              class="w-14.5 h-14.5"
+            />
+            <div v-else class="w-14.5 h-14.5 flex items-center justify-center text-muted-foreground">
+              <FileText class="size-5" />
+            </div>
           </div>
         </div>
       </InputGroupAddon>
@@ -219,18 +272,18 @@ onUnmounted(() => {
         <InputGroupButton
           size="icon-sm"
           class="rounded-full"
-          aria-label="Attach file"
-          :disabled="!supportsVision"
+          :aria-label="attachmentLabel"
+          :disabled="!supportsAttachments"
           @click="openFilePicker"
         >
-          <Image />
+          <component :is="attachmentIcon" />
         </InputGroupButton>
         <input
           id="picture"
           type="file"
           class="hidden"
           ref="fileInputRef"
-          accept="image/*"
+          :accept="fileAccept"
           @change="onFileChange"
         />
         <Toggle
@@ -291,6 +344,9 @@ onUnmounted(() => {
                         class="border border-green-300 rounded py-0.5 px-1"
                       >
                         <Brain class="size-4 text-green-300" />
+                      </div>
+                      <div v-if="model.pdf" class="border border-red-300 rounded py-0.5 px-1">
+                        <FileText class="size-4 text-red-300" />
                       </div>
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>

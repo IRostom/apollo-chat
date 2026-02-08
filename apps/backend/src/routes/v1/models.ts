@@ -17,6 +17,7 @@ interface ProviderModelResponse {
   vision: boolean;
   tools: boolean;
   thinking: boolean;
+  pdf: boolean;
   family?: string;
   families?: string[];
   parameter_size?: string;
@@ -52,6 +53,7 @@ router.get("/", async (_req: Request, res: Response) => {
           vision: model.capabilities.vision,
           tools: model.capabilities.tools,
           thinking: model.capabilities.thinking,
+          pdf: model.capabilities.pdf,
         })),
       });
     }
@@ -65,6 +67,7 @@ router.get("/", async (_req: Request, res: Response) => {
         ollamaModels = models.map((model) => ({
           ...model,
           providerId: "ollama-local",
+          pdf: false,
         }));
       } catch (error) {
         console.error("Error listing OLLAMA models:", error);
