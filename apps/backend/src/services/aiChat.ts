@@ -1,6 +1,6 @@
 import { db } from "../db/client";
 import { aiConversationsTable, aiMessagesTable } from "../db/schema";
-import { and, eq, gte, desc } from "drizzle-orm";
+import { and, eq, gte, desc, inArray } from "drizzle-orm";
 import type { Provider } from "../providers/factory";
 import type { UIMessage } from "ai";
 
@@ -117,7 +117,11 @@ export async function saveUIMessage(
   message: UIMessage,
   metadata?: unknown
 ): Promise<void> {
+  if (!message.id) {
+    throw new Error("UIMessage.id is required for persistence");
+  }
   await db.insert(aiMessagesTable).values({
+    id: message.id,
     conversation_id: conversationId,
     role: message.role,
     message: JSON.stringify(message),
@@ -137,12 +141,17 @@ export async function saveUIMessages(
   if (messages.length === 0) return;
 
   const rows = messages.map((msg, i) => ({
+    id: msg.id,
     conversation_id: conversationId,
     role: msg.role,
     message: JSON.stringify(msg),
     metadata:
       i === messages.length - 1 ? serializeJSON(metadata) : null,
   }));
+
+  if (rows.some((row) => !row.id)) {
+    throw new Error("UIMessage.id is required for persistence");
+  }
 
   await db.insert(aiMessagesTable).values(rows);
 }
@@ -157,7 +166,7 @@ export async function loadUIMessages(
     .select()
     .from(aiMessagesTable)
     .where(eq(aiMessagesTable.conversation_id, conversationId))
-    .orderBy(aiMessagesTable.id);
+    .orderBy(aiMessagesTable.created_at);
 
   return rows
     .map((row) => parseJSON<UIMessage>(row.message))
@@ -180,34 +189,71 @@ export async function loadUIMessages(
  */
 export async function getMessageRows(
   conversationId: number
-): Promise<{ dbId: number; uiMessage: UIMessage }[]> {
+): Promise<{ messageId: string; createdAt: number; uiMessage: UIMessage }[]> {
   const rows = await db
     .select()
     .from(aiMessagesTable)
     .where(eq(aiMessagesTable.conversation_id, conversationId))
-    .orderBy(aiMessagesTable.id);
+    .orderBy(aiMessagesTable.created_at);
 
   return rows
     .map((row) => ({
-      dbId: row.id,
+      messageId: row.id,
+      createdAt: row.created_at,
       uiMessage: parseJSON<UIMessage>(row.message)!,
     }))
     .filter((r) => r.uiMessage != null && Array.isArray(r.uiMessage.parts));
 }
 
 /**
- * Delete all message rows with DB ID >= the given threshold.
+ * Delete all message rows with created_at >= the given timestamp.
  */
-export async function deleteMessageRowsFrom(
+export async function deleteMessageRowsFromTimestamp(
   conversationId: number,
-  fromDbId: number
+  fromTimestamp: number
 ): Promise<void> {
   await db
     .delete(aiMessagesTable)
     .where(
       and(
         eq(aiMessagesTable.conversation_id, conversationId),
-        gte(aiMessagesTable.id, fromDbId)
+        gte(aiMessagesTable.created_at, fromTimestamp)
+      )
+    );
+}
+
+/**
+ * Delete assistant message rows with created_at >= the given timestamp.
+ */
+export async function deleteAssistantMessageRowsFromTimestamp(
+  conversationId: number,
+  fromTimestamp: number
+): Promise<void> {
+  await db
+    .delete(aiMessagesTable)
+    .where(
+      and(
+        eq(aiMessagesTable.conversation_id, conversationId),
+        eq(aiMessagesTable.role, "assistant"),
+        gte(aiMessagesTable.created_at, fromTimestamp)
+      )
+    );
+}
+
+/**
+ * Delete message rows by their message IDs.
+ */
+export async function deleteMessageRowsByIds(
+  conversationId: number,
+  messageIds: string[]
+): Promise<void> {
+  if (messageIds.length === 0) return;
+  await db
+    .delete(aiMessagesTable)
+    .where(
+      and(
+        eq(aiMessagesTable.conversation_id, conversationId),
+        inArray(aiMessagesTable.id, messageIds)
       )
     );
 }
@@ -216,7 +262,7 @@ export async function deleteMessageRowsFrom(
  * Update a single message row's content.
  */
 export async function updateMessageRow(
-  dbId: number,
+  messageId: string,
   uiMessage: UIMessage
 ): Promise<void> {
   await db
@@ -225,5 +271,5 @@ export async function updateMessageRow(
       message: JSON.stringify(uiMessage),
       role: uiMessage.role,
     })
-    .where(eq(aiMessagesTable.id, dbId));
+    .where(eq(aiMessagesTable.id, messageId));
 }

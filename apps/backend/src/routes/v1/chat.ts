@@ -1,6 +1,11 @@
 import { Router, Request, Response } from "express";
 import { body, validationResult } from "express-validator";
-import { streamText, convertToModelMessages, stepCountIs } from "ai";
+import {
+  streamText,
+  convertToModelMessages,
+  stepCountIs,
+  createIdGenerator,
+} from "ai";
 import type { UIMessage } from "ai";
 import {
   getModel,
@@ -14,12 +19,15 @@ import {
   saveUIMessage,
   loadUIMessages,
   getMessageRows,
-  deleteMessageRowsFrom,
+  deleteMessageRowsFromTimestamp,
+  deleteAssistantMessageRowsFromTimestamp,
+  deleteMessageRowsByIds,
   updateMessageRow,
 } from "../../services/aiChat";
 import { expandUIMessagesForProvider } from "../../services/filePartService";
 
 const router = Router();
+const generateMessageId = createIdGenerator({ prefix: "msg", size: 16 });
 
 // ============================================================================
 // Type Definitions
@@ -36,25 +44,15 @@ interface ChatRequestBody {
   provider: ApiProvider;
   model: string;
   /** Full UIMessage from the frontend Chat class */
-  message: UIMessage;
+  message?: UIMessage;
   conversationId?: string;
   systemPrompt?: string;
   enableWebTools?: boolean;
   enableCodeTools?: boolean;
   enableThinking?: boolean;
   responseFormat?: ResponseFormat;
-}
-
-interface RetryRequestBody {
-  provider: ApiProvider;
-  model: string;
-  /** UIMessage ID (string) of the assistant message to retry */
-  messageId: string;
-  conversationId: string;
-  enableWebTools?: boolean;
-  enableCodeTools?: boolean;
-  enableThinking?: boolean;
-  responseFormat?: ResponseFormat;
+  trigger?: "submit-user-message" | "regenerate-message";
+  messageId?: string;
 }
 
 interface EditRequestBody {
@@ -75,6 +73,10 @@ interface EditRequestBody {
 // ============================================================================
 
 const chatValidation = [
+  body("trigger")
+    .optional()
+    .isIn(["submit-message", "regenerate-message"])
+    .withMessage("trigger must be 'submit-message' or 'regenerate-message'"),
   body("provider")
     .isString()
     .isIn([
@@ -89,42 +91,18 @@ const chatValidation = [
       "Provider must be one of: openai, google, anthropic, ollama, ollama-local, ollama-cloud",
     ),
   body("model").isString().notEmpty().withMessage("Model is required"),
-  body("message").isObject().withMessage("Message must be an object"),
+  body("message").optional().isObject().withMessage("Message must be an object"),
   body("message.role")
+    .optional()
     .equals("user")
     .withMessage("Message role must be 'user'"),
-  body("message.parts").isArray().withMessage("Message parts must be an array"),
-  body("conversationId").optional().isString(),
-  body("systemPrompt").optional().isString(),
-  body("enableWebTools").optional().isBoolean(),
-  body("enableCodeTools").optional().isBoolean(),
-  body("enableThinking").optional().isBoolean(),
-  body("responseFormat")
+  body("message.parts")
     .optional()
-    .isIn(["ui", "text"])
-    .withMessage("responseFormat must be 'ui' or 'text'"),
-];
-
-const retryValidation = [
-  body("provider")
-    .isString()
-    .isIn([
-      "openai",
-      "google",
-      "anthropic",
-      "ollama",
-      "ollama-local",
-      "ollama-cloud",
-    ])
-    .withMessage(
-      "Provider must be one of: openai, google, anthropic, ollama, ollama-local, ollama-cloud",
-    ),
-  body("model").isString().notEmpty().withMessage("Model is required"),
-  body("messageId").isString().notEmpty().withMessage("messageId is required"),
-  body("conversationId")
-    .isString()
-    .notEmpty()
-    .withMessage("conversationId is required"),
+    .isArray()
+    .withMessage("Message parts must be an array"),
+  body("conversationId").optional().isString(),
+  body("messageId").optional().isString(),
+  body("systemPrompt").optional().isString(),
   body("enableWebTools").optional().isBoolean(),
   body("enableCodeTools").optional().isBoolean(),
   body("enableThinking").optional().isBoolean(),
@@ -191,6 +169,8 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
     enableCodeTools = false,
     enableThinking = false,
     responseFormat = "ui",
+    trigger = "submit-message",
+    messageId,
   } = req.body as ChatRequestBody;
 
   const internalProvider = mapApiProvider(provider);
@@ -201,7 +181,120 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
     });
   }
 
+  if (trigger === "regenerate-message") {
+    if (!conversationId) {
+      return res.status(400).json({ error: "conversationId is required" });
+    }
+
+    const convId = parseInt(conversationId, 10);
+
+    try {
+      // Load message rows with DB IDs
+      const rows = await getMessageRows(convId);
+
+      let targetIdx = -1;
+      if (messageId) {
+        targetIdx = rows.findIndex((r) => r.uiMessage.id === messageId);
+      } else {
+        for (let i = rows.length - 1; i >= 0; i -= 1) {
+          if (rows[i].uiMessage.role === "assistant") {
+            targetIdx = i;
+            break;
+          }
+        }
+      }
+
+      if (targetIdx === -1) {
+        return res.status(404).json({ error: "Assistant message not found" });
+      }
+      if (rows[targetIdx].uiMessage.role !== "assistant") {
+        return res
+          .status(400)
+          .json({ error: "Can only retry assistant messages" });
+      }
+
+      // Delete all messages after the target (including target) for consistency
+      const messageIdsToDelete = rows
+        .slice(targetIdx)
+        .map((row) => row.messageId);
+      await deleteMessageRowsByIds(convId, messageIdsToDelete);
+
+      // Remaining messages
+    const remainingMessages = rows.slice(0, targetIdx).map((r) => r.uiMessage);
+
+      // Get conversation for system prompt
+      const conversation = await getAIConversation(convId);
+
+      // Expand file parts for the target provider before conversion
+      const expandedMessages = await expandUIMessagesForProvider(
+        remainingMessages,
+        provider,
+      );
+
+      // Convert to model messages
+      const modelMessages = await convertToModelMessages(expandedMessages);
+
+      // Get tools and model
+      const tools = getEnabledTools({ enableCodeTools, enableWebTools });
+      const modelInstance = getModel(internalProvider, model, {
+        think: enableThinking,
+      });
+
+      // Stream the response
+      const result = streamText({
+        model: modelInstance as any,
+        messages: modelMessages as any,
+        system: conversation?.system_prompt ?? undefined,
+        tools: Object.keys(tools).length > 0 ? tools : undefined,
+        stopWhen: stepCountIs(10),
+        onError: ({ error }) => {
+          console.error("Stream error:", error);
+        },
+      });
+
+      if (responseFormat === "text") {
+        result.pipeTextStreamToResponse(res);
+      } else {
+        result.pipeUIMessageStreamToResponse(res, {
+          sendReasoning: true,
+          sendSources: true,
+          originalMessages: remainingMessages,
+          generateMessageId,
+          onFinish: async ({ responseMessage, finishReason }) => {
+            const usage = await result.usage;
+            await saveUIMessage(convId, responseMessage, {
+              usage,
+              finishReason,
+            });
+            console.log("Regenerate completed:", { convId, finishReason, usage });
+          },
+        });
+      }
+
+      result.consumeStream();
+    } catch (err) {
+      console.error("Regenerate error:", err);
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: err instanceof Error ? err.message : "Internal server error",
+        });
+      }
+    }
+
+    return;
+  }
+
   let convId = conversationId ? parseInt(conversationId, 10) : null;
+
+  if (!message) {
+    return res.status(400).json({ error: "message is required" });
+  }
+  if (message.role !== "user") {
+    return res.status(400).json({ error: "Message role must be 'user'" });
+  }
+  if (!Array.isArray(message.parts)) {
+    return res.status(400).json({ error: "Message parts must be an array" });
+  }
 
   try {
     // Create conversation if needed
@@ -273,6 +366,7 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
         sendReasoning: true,
         sendSources: true,
         originalMessages: allMessages,
+        generateMessageId,
         onFinish: async ({ responseMessage, finishReason }) => {
           const usage = await result.usage;
           await saveUIMessage(conversationIdForCallback, responseMessage, {
@@ -293,117 +387,6 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
     result.consumeStream();
   } catch (err) {
     console.error("Chat error:", err);
-    if (!res.headersSent) {
-      res.status(500).json({
-        error: err instanceof Error ? err.message : "Internal server error",
-      });
-    }
-  }
-});
-
-/**
- * POST /api/v1/chat/retry
- * Retry the last assistant message.
- * Deletes the assistant message (and everything after it) and regenerates.
- */
-router.post("/retry", retryValidation, async (req: Request, res: Response) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-
-  const {
-    provider,
-    model,
-    messageId,
-    conversationId,
-    enableWebTools = false,
-    enableCodeTools = false,
-    enableThinking = false,
-    responseFormat = "ui",
-  } = req.body as RetryRequestBody;
-
-  const convId = parseInt(conversationId, 10);
-
-  const internalProvider = mapApiProvider(provider);
-
-  if (!isProviderConfigured(internalProvider)) {
-    return res.status(400).json({
-      error: `Provider '${provider}' is not configured. Please set the required API key.`,
-    });
-  }
-
-  try {
-    // Load message rows with DB IDs
-    const rows = await getMessageRows(convId);
-    const targetIdx = rows.findIndex((r) => r.uiMessage.id === messageId);
-
-    if (targetIdx === -1) {
-      return res.status(404).json({ error: "Message not found" });
-    }
-    if (rows[targetIdx].uiMessage.role !== "assistant") {
-      return res
-        .status(400)
-        .json({ error: "Can only retry assistant messages" });
-    }
-
-    // Delete the assistant message and everything after it
-    await deleteMessageRowsFrom(convId, rows[targetIdx].dbId);
-
-    // Remaining messages
-    const remainingMessages = rows.slice(0, targetIdx).map((r) => r.uiMessage);
-
-    // Get conversation for system prompt
-    const conversation = await getAIConversation(convId);
-
-    // Expand file parts for the target provider before conversion
-    const expandedMessages = await expandUIMessagesForProvider(
-      remainingMessages,
-      provider,
-    );
-
-    // Convert to model messages
-    const modelMessages = await convertToModelMessages(expandedMessages);
-
-    // Get tools and model
-    const tools = getEnabledTools({ enableCodeTools, enableWebTools });
-    const modelInstance = getModel(internalProvider, model, {
-      think: enableThinking,
-    });
-
-    // Stream the response
-    const result = streamText({
-      model: modelInstance as any,
-      messages: modelMessages as any,
-      system: conversation?.system_prompt ?? undefined,
-      tools: Object.keys(tools).length > 0 ? tools : undefined,
-      stopWhen: stepCountIs(10),
-      onError: ({ error }) => {
-        console.error("Stream error:", error);
-      },
-    });
-
-    if (responseFormat === "text") {
-      result.pipeTextStreamToResponse(res);
-    } else {
-      result.pipeUIMessageStreamToResponse(res, {
-        sendReasoning: true,
-        sendSources: true,
-        originalMessages: remainingMessages,
-        onFinish: async ({ responseMessage, finishReason }) => {
-          const usage = await result.usage;
-          await saveUIMessage(convId, responseMessage, {
-            usage,
-            finishReason,
-          });
-          console.log("Retry completed:", { convId, finishReason, usage });
-        },
-      });
-    }
-
-    result.consumeStream();
-  } catch (err) {
-    console.error("Retry error:", err);
     if (!res.headersSent) {
       res.status(500).json({
         error: err instanceof Error ? err.message : "Internal server error",
@@ -462,11 +445,14 @@ router.post("/edit", editValidation, async (req: Request, res: Response) => {
       ...rows[targetIdx].uiMessage,
       parts: [{ type: "text" as const, text: content }],
     };
-    await updateMessageRow(rows[targetIdx].dbId, updatedMessage);
+    await updateMessageRow(rows[targetIdx].messageId, updatedMessage);
 
     // Delete everything after the edited message
     if (targetIdx + 1 < rows.length) {
-      await deleteMessageRowsFrom(convId, rows[targetIdx + 1].dbId);
+      const messageIdsToDelete = rows
+        .slice(targetIdx + 1)
+        .map((row) => row.messageId);
+      await deleteMessageRowsByIds(convId, messageIdsToDelete);
     }
 
     // Remaining messages
@@ -512,6 +498,7 @@ router.post("/edit", editValidation, async (req: Request, res: Response) => {
         sendReasoning: true,
         sendSources: true,
         originalMessages: remainingMessages,
+        generateMessageId,
         onFinish: async ({ responseMessage, finishReason }) => {
           const usage = await result.usage;
           await saveUIMessage(convId, responseMessage, {

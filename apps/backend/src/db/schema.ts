@@ -64,14 +64,14 @@ export const aiConversationsTable = sqliteTable("ai_conversations", {
 });
 
 export const aiMessagesTable = sqliteTable("ai_messages", {
-  id: int().primaryKey({ autoIncrement: true }),
+  id: text().primaryKey().notNull(),
   conversation_id: int()
     .notNull()
     .references(() => aiConversationsTable.id),
   role: text().notNull(), // 'user' | 'assistant' — from UIMessage.role
   message: text().notNull(), // JSON-serialized UIMessage from AI SDK
   metadata: text(), // JSON string for usage stats, finish reason, etc.
-  created_at: text()
+  created_at: int()
     .notNull()
-    .default(sql`(current_timestamp)`),
+    .default(sql`(unixepoch())`),
 });

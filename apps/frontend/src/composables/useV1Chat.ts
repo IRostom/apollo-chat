@@ -67,12 +67,12 @@ export function useV1Chat() {
       }
 
       // Retry: regenerate the last assistant message
-      if (trigger === 'regenerate-message' && messageId) {
+      if (trigger === 'regenerate-message') {
         return {
-          api: getApiUrl(API_CONFIG.endpoints.v1Chat.retry),
           body: {
             provider,
             model,
+            trigger,
             messageId, // UIMessage ID (string)
             conversationId: chatConversationId.value,
             enableWebTools,
@@ -90,6 +90,7 @@ export function useV1Chat() {
         body: {
           provider,
           model,
+          trigger,
           message: lastMessage, // Full UIMessage with id, role, parts
           conversationId: chatConversationId.value,
           enableWebTools,
@@ -199,6 +200,13 @@ export function useV1Chat() {
   }
 
   /**
+   * Stop the current streaming response.
+   */
+  async function stop() {
+    await chat.stop()
+  }
+
+  /**
    * Clear error state
    */
   function clearError() {
@@ -248,6 +256,7 @@ export function useV1Chat() {
     isEmpty,
     sendMessage,
     regenerate,
+    stop,
     clearError,
   }
 }

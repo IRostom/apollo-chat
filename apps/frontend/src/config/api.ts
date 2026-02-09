@@ -10,7 +10,6 @@ export const API_CONFIG = {
   endpoints: {
     v1Chat: {
       send: '/api/v1/chat',
-      retry: '/api/v1/chat/retry',
       edit: '/api/v1/chat/edit',
     },
     v1Conversations: {

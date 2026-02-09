@@ -5,7 +5,7 @@ import V1ChatMessages from './V1ChatMessages.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import { toast } from 'vue-sonner'
 
-const { messages, isStreaming, isEmpty, sendMessage, regenerate } = useV1Chat()
+const { messages, isStreaming, isEmpty, sendMessage, regenerate, stop } = useV1Chat()
 const { files, uploadFile, reset } = useUploadFile()
 
 async function handleSend(message: string) {
@@ -16,12 +16,20 @@ async function handleSend(message: string) {
 }
 
 async function handleRetry(messageId: string) {
-    await regenerate(messageId)
+    const lastAssistantId = [...messages.value]
+        .reverse()
+        .find((message) => message.role === 'assistant')?.id
+
+    if (lastAssistantId && messageId !== lastAssistantId) {
+        await regenerate(messageId)
+    } else {
+        await regenerate()
+    }
 }
 
-function handleStop() {
-    // TODO: implement stop when Chat class exposes abort
-    toast.info('Stop is not yet supported in v1 chat')
+async function handleStop() {
+    await stop()
+    toast.info('Stopped generation')
 }
 
 async function handleAttach(file: File) {
