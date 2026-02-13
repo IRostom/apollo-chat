@@ -34,6 +34,7 @@ export interface CreateAIConversationInput {
   provider: Provider;
   model: string;
   system_prompt?: string;
+  user_id: string;
 }
 
 export interface AIConversation {
@@ -42,6 +43,7 @@ export interface AIConversation {
   provider: string;
   model: string;
   system_prompt: string | null;
+  user_id: string;
   created_at: string;
   updated_at: string;
 }
@@ -63,31 +65,40 @@ export async function createAIConversation(
       provider: input.provider,
       model: input.model,
       system_prompt: input.system_prompt ?? null,
+      user_id: input.user_id,
     })
     .returning({ insertedId: aiConversationsTable.id });
   return conv.insertedId;
 }
 
 /**
- * Get a conversation by ID.
+ * Get a conversation by ID, scoped to a user.
  */
 export async function getAIConversation(
-  id: number
+  id: number,
+  userId?: string
 ): Promise<AIConversation | undefined> {
+  const conditions = [eq(aiConversationsTable.id, id)];
+  if (userId) {
+    conditions.push(eq(aiConversationsTable.user_id, userId));
+  }
   const [conv] = await db
     .select()
     .from(aiConversationsTable)
-    .where(eq(aiConversationsTable.id, id));
+    .where(and(...conditions));
   return conv;
 }
 
 /**
- * List all AI conversations, ordered by most recent.
+ * List all AI conversations for a user, ordered by most recent.
  */
-export async function listAIConversations(): Promise<AIConversation[]> {
+export async function listAIConversations(
+  userId: string
+): Promise<AIConversation[]> {
   return db
     .select()
     .from(aiConversationsTable)
+    .where(eq(aiConversationsTable.user_id, userId))
     .orderBy(desc(aiConversationsTable.updated_at));
 }
 
@@ -98,9 +109,10 @@ export async function listAIConversations(): Promise<AIConversation[]> {
  */
 export async function branchConversation(
   conversationId: number,
-  messageId: string
+  messageId: string,
+  userId: string
 ): Promise<number> {
-  const conversation = await getAIConversation(conversationId);
+  const conversation = await getAIConversation(conversationId, userId);
   if (!conversation) {
     throw new Error("Conversation not found");
   }
@@ -135,6 +147,7 @@ export async function branchConversation(
     provider: conversation.provider as Provider,
     model: conversation.model,
     system_prompt: conversation.system_prompt ?? undefined,
+    user_id: userId,
   });
 
   // Clone messages with new IDs to avoid primary key conflicts (ai_messages.id is globally unique)
@@ -148,17 +161,25 @@ export async function branchConversation(
 }
 
 /**
- * Delete a conversation and all its messages.
+ * Delete a conversation and all its messages (scoped to user).
  * Uses a transaction so both deletes succeed or both roll back.
  */
-export async function deleteAIConversation(id: number): Promise<void> {
+export async function deleteAIConversation(
+  id: number,
+  userId: string
+): Promise<void> {
   await db.transaction(async (tx) => {
     await tx
       .delete(aiMessagesTable)
       .where(eq(aiMessagesTable.conversation_id, id));
     await tx
       .delete(aiConversationsTable)
-      .where(eq(aiConversationsTable.id, id));
+      .where(
+        and(
+          eq(aiConversationsTable.id, id),
+          eq(aiConversationsTable.user_id, userId)
+        )
+      );
   });
 }
 

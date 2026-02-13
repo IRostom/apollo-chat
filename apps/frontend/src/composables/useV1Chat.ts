@@ -23,6 +23,7 @@ import { computed, ref, shallowRef, watch } from 'vue'
 import { useV1ConversationRoute } from './useV1ConversationRoute'
 import { useAppStore } from '@/stores/app'
 import { getApiUrl, API_CONFIG } from '@/config/api'
+import { authFetch } from '@/lib/auth'
 import { useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
 import { editV1Message, getV1ConversationMessages, branchV1Conversation } from '@/api/chatService'
@@ -113,11 +114,11 @@ export function useV1Chat() {
     },
 
     /**
-     * Custom fetch to intercept response headers.
+     * Custom fetch to intercept response headers and attach auth token.
      * Extracts X-Conversation-Id for new conversations.
      */
     fetch: async (url, init) => {
-      const response = await fetch(url as string, init as RequestInit)
+      const response = await authFetch(url as string, init as RequestInit)
 
       // Extract conversation ID from response headers for new conversations
       const convId = response.headers.get('X-Conversation-Id')

@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { getAuth } from "@clerk/express";
 import {
   listAIConversations,
   loadUIMessages,
@@ -16,11 +17,16 @@ const router = Router();
 
 /**
  * GET /api/v1/conversations
- * List all v1 (AI SDK) conversations
+ * List all v1 (AI SDK) conversations for the authenticated user
  */
-router.get("/", async (_req: Request, res: Response) => {
+router.get("/", async (req: Request, res: Response) => {
+  const { userId } = getAuth(req);
+  if (!userId) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
   try {
-    const conversations = await listAIConversations();
+    const conversations = await listAIConversations(userId);
     res.json(conversations);
   } catch (err) {
     console.error("Error listing v1 conversations:", err);
@@ -37,13 +43,18 @@ router.get("/", async (_req: Request, res: Response) => {
  * Messages are stored as UIMessages directly, so no conversion is needed.
  */
 router.get("/:id/messages", async (req: Request, res: Response) => {
+  const { userId } = getAuth(req);
+  if (!userId) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
   const convId = parseInt(req.params.id, 10);
   if (isNaN(convId)) {
     return res.status(400).json({ error: "Invalid conversation ID" });
   }
 
   try {
-    const conversation = await getAIConversation(convId);
+    const conversation = await getAIConversation(convId, userId);
     if (!conversation) {
       return res.status(404).json({ error: "Conversation not found" });
     }
@@ -67,6 +78,11 @@ router.get("/:id/messages", async (req: Request, res: Response) => {
  * Body: { messageId: string }
  */
 router.post("/:id/branch", async (req: Request, res: Response) => {
+  const { userId } = getAuth(req);
+  if (!userId) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
   const convId = parseInt(req.params.id, 10);
   if (isNaN(convId)) {
     return res.status(400).json({ error: "Invalid conversation ID" });
@@ -78,7 +94,7 @@ router.post("/:id/branch", async (req: Request, res: Response) => {
   }
 
   try {
-    const newConvId = await branchConversation(convId, messageId);
+    const newConvId = await branchConversation(convId, messageId, userId);
     res.status(201).json({ id: newConvId });
   } catch (err) {
     console.error("Error branching conversation:", err);
@@ -93,18 +109,23 @@ router.post("/:id/branch", async (req: Request, res: Response) => {
  * Delete a v1 conversation and all its messages
  */
 router.delete("/:id", async (req: Request, res: Response) => {
+  const { userId } = getAuth(req);
+  if (!userId) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
   const convId = parseInt(req.params.id, 10);
   if (isNaN(convId)) {
     return res.status(400).json({ error: "Invalid conversation ID" });
   }
 
   try {
-    const conversation = await getAIConversation(convId);
+    const conversation = await getAIConversation(convId, userId);
     if (!conversation) {
       return res.status(404).json({ error: "Conversation not found" });
     }
 
-    await deleteAIConversation(convId);
+    await deleteAIConversation(convId, userId);
     res.json({ success: true });
   } catch (err) {
     console.error("Error deleting v1 conversation:", err);

@@ -1,5 +1,6 @@
 import express, { Express } from "express";
 import "dotenv/config";
+import { clerkMiddleware, requireAuth } from "@clerk/express";
 import corsMiddleware from "./plugins/cors";
 import ollamaRouter from "./routes/ollamaRouter";
 import uploadRouter from "./routes/upload";
@@ -31,15 +32,18 @@ app.use(express.json());
 // CORS middleware
 app.use(corsMiddleware);
 
-// Routes
-app.use("/", ollamaRouter);
-app.use("/", uploadRouter);
-app.use("/", transcribeRouter);
-app.use("/", modelsRouter);
+// Clerk auth middleware (parses session JWT from Authorization header)
+app.use(clerkMiddleware());
 
-// V1 API routes (AI SDK based)
-app.use("/api/v1/chat", v1ChatRouter);
-app.use("/api/v1/conversations", v1ConversationRouter);
-app.use("/api/v1/models", v1ModelsRouter);
+// Routes (all protected by requireAuth)
+app.use("/", requireAuth(), ollamaRouter);
+app.use("/", requireAuth(), uploadRouter);
+app.use("/", requireAuth(), transcribeRouter);
+app.use("/", requireAuth(), modelsRouter);
+
+// V1 API routes (AI SDK based, all protected)
+app.use("/api/v1/chat", requireAuth(), v1ChatRouter);
+app.use("/api/v1/conversations", requireAuth(), v1ConversationRouter);
+app.use("/api/v1/models", requireAuth(), v1ModelsRouter);
 
 export default app;
