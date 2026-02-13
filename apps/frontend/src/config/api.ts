@@ -15,6 +15,7 @@ export const API_CONFIG = {
     v1Conversations: {
       list: '/api/v1/conversations',
       messages: (id: string) => `/api/v1/conversations/${id}/messages`,
+      branch: (id: string) => `/api/v1/conversations/${id}/branch`,
       delete: (id: string) => `/api/v1/conversations/${id}`,
     },
     models: {

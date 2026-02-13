@@ -1,8 +1,11 @@
+import { createIdGenerator } from "ai";
 import { db } from "../db/client";
 import { aiConversationsTable, aiMessagesTable } from "../db/schema";
 import { and, eq, gte, desc, inArray } from "drizzle-orm";
 import type { Provider } from "../providers/factory";
 import type { UIMessage } from "ai";
+
+const generateMessageId = createIdGenerator({ prefix: "msg", size: 16 });
 
 // ============================================================================
 // JSON Serialization Helpers
@@ -86,6 +89,62 @@ export async function listAIConversations(): Promise<AIConversation[]> {
     .select()
     .from(aiConversationsTable)
     .orderBy(desc(aiConversationsTable.updated_at));
+}
+
+/**
+ * Branch a conversation at an assistant message.
+ * Creates a new conversation with messages up to and including the specified message.
+ * Returns the new conversation ID.
+ */
+export async function branchConversation(
+  conversationId: number,
+  messageId: string
+): Promise<number> {
+  const conversation = await getAIConversation(conversationId);
+  if (!conversation) {
+    throw new Error("Conversation not found");
+  }
+
+  const messages = await loadUIMessages(conversationId);
+  const branchIndex = messages.findIndex((m) => m.id === messageId);
+  if (branchIndex === -1) {
+    throw new Error("Message not found");
+  }
+  if (messages[branchIndex].role !== "assistant") {
+    throw new Error("Can only branch from an assistant message");
+  }
+
+  const messagesToCopy = messages.slice(0, branchIndex + 1);
+  if (messagesToCopy.length === 0) {
+    throw new Error("No messages to branch");
+  }
+
+  const title =
+    messagesToCopy
+      .filter((m) => m.role === "user")
+      .flatMap((m) =>
+        (m.parts ?? [])
+          .filter((p): p is { type: "text"; text: string } => p.type === "text")
+          .map((p) => p.text)
+      )
+      .join(" ")
+      .slice(0, 50) || "Branched chat";
+
+  const newConvId = await createAIConversation({
+    title,
+    provider: conversation.provider as Provider,
+    model: conversation.model,
+    system_prompt: conversation.system_prompt ?? undefined,
+  });
+
+  // Clone messages with new IDs to avoid primary key conflicts (ai_messages.id is globally unique)
+  const messagesWithNewIds: UIMessage[] = messagesToCopy.map((msg) => ({
+    ...msg,
+    id: generateMessageId(),
+  }));
+
+  await saveUIMessages(newConvId, messagesWithNewIds);
+  return newConvId;
 }
 
 /**

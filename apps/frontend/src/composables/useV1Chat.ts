@@ -25,7 +25,7 @@ import { useAppStore } from '@/stores/app'
 import { getApiUrl, API_CONFIG } from '@/config/api'
 import { useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
-import { editV1Message, getV1ConversationMessages } from '@/api/chatService'
+import { editV1Message, getV1ConversationMessages, branchV1Conversation } from '@/api/chatService'
 import type { ChatFile } from '@/types/chat'
 
 /**
@@ -67,7 +67,7 @@ export function useV1Chat() {
       const provider = getProvider()
       const model = appStore.userSelectedModelName
       const enableWebTools = appStore.canUseWebTools && appStore.useWebTools
-      const enableCodeTools = false
+      const enableCodeTools = appStore.canUseCodeTools && appStore.useCodeTools
       const enableThinking = appStore.canThink && appStore.shouldThink
 
       if (!model) {
@@ -194,9 +194,16 @@ export function useV1Chat() {
     }
 
     const originalMsg = chat.messages[targetIdx]
+    if (!originalMsg || originalMsg.role !== 'user') {
+      toast.error('Cannot edit this message')
+      cancelEdit()
+      return
+    }
+
     const updatedUserMessage: UIMessage = {
       ...originalMsg,
       id: originalMsg.id ?? msg.id,
+      role: 'user',
       parts: [{ type: 'text' as const, text: newContent }],
     }
     const messagesBeforeEdit = [
@@ -215,7 +222,7 @@ export function useV1Chat() {
         provider: getProvider(),
         model: appStore.userSelectedModelName!,
         enableWebTools: appStore.canUseWebTools && appStore.useWebTools,
-        enableCodeTools: false,
+        enableCodeTools: appStore.canUseCodeTools && appStore.useCodeTools,
         enableThinking: appStore.canThink && appStore.shouldThink,
       })
 
@@ -342,6 +349,25 @@ export function useV1Chat() {
     }
   }
 
+  async function branchConversation(assistantMessageId: string) {
+    const convId = chatConversationId.value
+    if (!convId) {
+      toast.error('Cannot branch', { description: 'No conversation loaded.' })
+      return
+    }
+    try {
+      const newConvId = await branchV1Conversation(convId, assistantMessageId)
+      navigateToConversation(newConvId)
+      queryClient.invalidateQueries({ queryKey: ['chats'] })
+      toast.success('Branched to new conversation')
+    } catch (err) {
+      console.error('Branch error:', err)
+      toast.error('Failed to branch', {
+        description: err instanceof Error ? err.message : 'Unknown error',
+      })
+    }
+  }
+
   // Handle route changes: load history or reset for new chat
   watch(
     conversationId,
@@ -370,6 +396,7 @@ export function useV1Chat() {
     sendMessage,
     regenerate,
     stop,
+    branchConversation,
     clearError,
   }
 }

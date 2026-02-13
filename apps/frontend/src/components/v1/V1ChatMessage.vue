@@ -4,7 +4,7 @@ import { isToolUIPart, getToolName } from 'ai'
 import { computed } from 'vue'
 import Spinner from '@/components/ui/spinner/Spinner.vue'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { ChevronDown, ChevronUp, AlertCircle, RotateCcw, Globe, FileText } from 'lucide-vue-next'
+import { ChevronDown, ChevronUp, AlertCircle, RotateCcw, Globe, FileText, ExternalLink } from 'lucide-vue-next'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import MessageTools from '@/components/chat/MessageTools.vue'
@@ -23,6 +23,7 @@ const emit = defineEmits<{
     retry: [messageId: string]
     copy: [content: string]
     edit: [payload: { id: string; content: string }]
+    branch: [messageId: string]
 }>()
 
 const isUser = computed(() => props.message.role === 'user')
@@ -111,6 +112,17 @@ function getWebSearchResults(tool: any): { title: string; url: string }[] | null
     return null
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getWebFetchUrl(tool: any): string | null {
+    const input = tool?.input
+    if (!input || typeof input !== 'object') return null
+    return input.url ?? null
+}
+
+function isWebFetchTool(tool: unknown): boolean {
+    return getToolName(tool) === 'webFetch'
+}
+
 function handleRetry() {
     emit('retry', props.message.id)
 }
@@ -179,8 +191,38 @@ function handleRetry() {
             </CollapsibleContent>
         </Collapsible>
 
-        <!-- Tool calls -->
-        <div v-for="tool in toolParts" :key="(tool as any).toolCallId" class="my-2">
+        <!-- Tool calls: webFetch = compact icon + URL only (no expandable content) -->
+        <div
+            v-for="tool in toolParts.filter((t) => isWebFetchTool(t))"
+            :key="(tool as any).toolCallId"
+            class="my-2"
+        >
+            <a
+                v-if="getWebFetchUrl(tool)"
+                :href="getWebFetchUrl(tool)!"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center gap-2 text-xs border rounded-lg px-2 py-1.5 hover:bg-muted transition-colors no-underline w-fit"
+            >
+                <Spinner
+                    v-if="(tool as any).state === 'input-streaming' || (tool as any).state === 'input-available'"
+                    class="h-4 w-4 shrink-0" />
+                <ExternalLink v-else class="h-4 w-4 shrink-0" />
+                <span class="font-medium">webFetch</span>
+                <span class="truncate max-w-72 text-muted-foreground">{{ getWebFetchUrl(tool) }}</span>
+            </a>
+            <div
+                v-else
+                class="inline-flex items-center gap-2 text-xs border rounded-lg px-2 py-1.5 w-fit text-muted-foreground"
+            >
+                <Spinner class="h-4 w-4 shrink-0" />
+                <span class="font-medium">webFetch</span>
+                <span>Fetching...</span>
+            </div>
+        </div>
+
+        <!-- Tool calls: other tools (expandable) -->
+        <div v-for="tool in toolParts.filter((t) => !isWebFetchTool(t))" :key="(tool as any).toolCallId" class="my-2">
             <Collapsible class="border rounded-lg" v-slot="{ open }">
                 <CollapsibleTrigger class="py-2 px-3 cursor-pointer w-full text-start flex items-center">
                     <div class="flex items-center gap-2">
@@ -267,10 +309,10 @@ function handleRetry() {
             </Button>
         </div>
 
-        <!-- Message tools (copy, retry) -->
+        <!-- Message tools (copy, retry, branch) -->
         <div v-if="!isTextStreaming && textContent.trim().length > 0" class="mt-2 flex items-center gap-3">
             <MessageTools role="assistant" class="opacity-0 group-hover:opacity-100 transition-opacity"
-                @copy="emit('copy', textContent)" @retry="handleRetry" />
+                @copy="emit('copy', textContent)" @retry="handleRetry" @branch="emit('branch', message.id)" />
         </div>
     </div>
 </template>

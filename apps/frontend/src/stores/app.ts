@@ -13,6 +13,8 @@ export const useAppStore = defineStore(
     const shouldThink = ref(false)
     const canUseWebTools = computed(() => userSelectedModel.value?.tools ?? false)
     const useWebTools = ref(false)
+    const canUseCodeTools = computed(() => userSelectedModel.value?.tools ?? false)
+    const useCodeTools = ref(true)
     const supportsVision = computed(() => userSelectedModel.value?.vision ?? false)
     const supportsPdf = computed(() => userSelectedModel.value?.pdf ?? false)
     const supportsAttachments = computed(() => supportsVision.value || supportsPdf.value)
@@ -35,6 +37,9 @@ export const useAppStore = defineStore(
     function updateUseWebTools(v: boolean) {
       useWebTools.value = v
     }
+    function updateUseCodeTools(v: boolean) {
+      useCodeTools.value = v
+    }
 
     return {
       userSelectedModel,
@@ -43,8 +48,10 @@ export const useAppStore = defineStore(
       userSelectedModelName,
       canThink,
       canUseWebTools,
+      canUseCodeTools,
       shouldThink,
       useWebTools,
+      useCodeTools,
       supportsVision,
       supportsPdf,
       supportsAttachments,
@@ -53,6 +60,7 @@ export const useAppStore = defineStore(
       updateUserSelectedModelFamily,
       updateShouldThink,
       updateUseWebTools,
+      updateUseCodeTools,
     }
   },
   {

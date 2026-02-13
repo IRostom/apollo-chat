@@ -5,6 +5,7 @@ import {
   ChevronDown,
   Brain,
   Globe,
+  Code2,
   Image,
   Mic,
   Square,
@@ -106,6 +107,7 @@ const userMsg = ref('')
 const userSelectedModelName = computed(() => appStore.userSelectedModelName)
 const canThink = computed(() => appStore.canThink)
 const canUseWebTools = computed(() => appStore.canUseWebTools)
+const canUseCodeTools = computed(() => appStore.canUseCodeTools)
 const supportsVision = computed(() => appStore.supportsVision)
 const supportsPdf = computed(() => appStore.supportsPdf)
 const supportsAttachments = computed(() => appStore.supportsAttachments)
@@ -305,6 +307,16 @@ onUnmounted(() => {
         >
           <Globe class="h-4 w-4" />
           Search
+        </Toggle>
+        <Toggle
+          size="sm"
+          :modelValue="appStore.useCodeTools"
+          :disabled="!canUseCodeTools"
+          @update:modelValue="appStore.updateUseCodeTools"
+          aria-label="Toggle code execution"
+        >
+          <Code2 class="h-4 w-4" />
+          Code
         </Toggle>
         <div class="ml-auto flex gap-2">
           <DropdownMenu>

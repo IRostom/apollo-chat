@@ -78,6 +78,33 @@ export function editV1Message(params: EditV1MessageParams): Promise<Response> {
 }
 
 /**
+ * Branch a conversation at an assistant message.
+ * Creates a new conversation with messages up to and including that message.
+ * Returns the new conversation ID.
+ */
+export async function branchV1Conversation(
+  conversationId: string,
+  messageId: string
+): Promise<string> {
+  const response = await fetch(
+    getApiUrl(API_CONFIG.endpoints.v1Conversations.branch(conversationId)),
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messageId }),
+    }
+  )
+
+  if (!response.ok) {
+    const res = await response.json().catch(() => ({ error: 'Failed to branch conversation' }))
+    throw new Error(res.error || 'Failed to branch conversation')
+  }
+
+  const { id } = await response.json()
+  return String(id)
+}
+
+/**
  * Delete a v1 conversation
  */
 export async function deleteV1Conversation(id: string): Promise<void> {

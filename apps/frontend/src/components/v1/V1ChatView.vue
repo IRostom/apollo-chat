@@ -16,6 +16,7 @@ const {
     sendMessage,
     regenerate,
     stop,
+    branchConversation,
 } = useV1Chat()
 const { files, uploadFile, reset } = useUploadFile()
 
@@ -68,6 +69,10 @@ async function handleCopy(content: string) {
         toast.error('Failed to copy to clipboard')
     }
 }
+
+async function handleBranch(messageId: string) {
+    await branchConversation(messageId)
+}
 </script>
 
 <template>
@@ -98,6 +103,7 @@ async function handleCopy(content: string) {
                 @retry="handleRetry"
                 @copy="handleCopy"
                 @edit="handleEdit"
+                @branch="handleBranch"
             />
         </div>
 
