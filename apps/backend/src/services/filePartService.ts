@@ -1,4 +1,5 @@
 import type { UIMessage, FileUIPart } from "ai";
+import { bodyToBuffer } from "../utils/bufferUtils";
 import { getObject, getPresignedUrl } from "./storageService";
 
 const OLLAMA_PROVIDERS = new Set(["ollama", "ollama-local", "ollama-cloud"]);
@@ -20,52 +21,14 @@ function isFilePart(part: unknown): part is FileUIPart {
   );
 }
 
-async function bodyToBuffer(body: unknown): Promise<Buffer> {
-  if (!body) {
-    return Buffer.alloc(0);
-  }
-
-  if (Buffer.isBuffer(body)) {
-    return body;
-  }
-
-  if (body instanceof Uint8Array) {
-    return Buffer.from(body);
-  }
-
-  if (typeof body === "string") {
-    return Buffer.from(body);
-  }
-
-  if (typeof (body as { transformToByteArray?: () => Promise<Uint8Array> }).transformToByteArray === "function") {
-    const bytes = await (body as { transformToByteArray: () => Promise<Uint8Array> }).transformToByteArray();
-    return Buffer.from(bytes);
-  }
-
-  if (typeof (body as { arrayBuffer?: () => Promise<ArrayBuffer> }).arrayBuffer === "function") {
-    const buffer = await (body as { arrayBuffer: () => Promise<ArrayBuffer> }).arrayBuffer();
-    return Buffer.from(buffer);
-  }
-
-  if (typeof (body as NodeJS.ReadableStream).on === "function") {
-    return new Promise((resolve, reject) => {
-      const chunks: Buffer[] = [];
-      (body as NodeJS.ReadableStream).on("data", (chunk) => {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      });
-      (body as NodeJS.ReadableStream).on("end", () => resolve(Buffer.concat(chunks)));
-      (body as NodeJS.ReadableStream).on("error", reject);
-    });
-  }
-
-  throw new Error("Unsupported S3 body type for base64 conversion");
-}
-
 async function keyToBase64DataUrl(
   key: string,
   mediaType: string | undefined,
 ): Promise<string> {
   const object = await getObject(key);
+  if (!object.Body) {
+    throw new Error(`Missing body for S3 object: ${key}`);
+  }
   const bodyBuffer = await bodyToBuffer(object.Body);
   const contentType = mediaType || object.ContentType || "application/octet-stream";
   return `data:${contentType};base64,${bodyBuffer.toString("base64")}`;

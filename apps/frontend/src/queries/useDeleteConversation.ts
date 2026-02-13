@@ -8,9 +8,8 @@ export function useDeleteConversation() {
     mutationFn: (conversationId: string) => {
       return deleteV1Conversation(conversationId)
     },
-    onSuccess: (_data, conversationId) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['chats'] })
-      queryClient.removeQueries({ queryKey: ['v1-chat', conversationId] })
     },
   })
 }

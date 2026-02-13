@@ -329,19 +329,25 @@ export function useV1Chat() {
     chat.clearError()
   }
 
+  let latestLoadId: string | undefined
+
   /**
    * Load conversation history from the backend.
    * Uses validateUIMessages per the AI SDK docs:
    * "When loading messages from storage that contain tools, metadata,
    * or custom data parts, validate them using validateUIMessages."
+   * Guards against race conditions when navigating between conversations quickly.
    */
   async function loadConversation(id: string) {
+    latestLoadId = id
     try {
       const rawMessages = await getV1ConversationMessages(id)
-      // Validate stored messages (structural validation without tool schemas)
+      if (latestLoadId !== id) return
       const validated = await validateUIMessages({ messages: rawMessages })
+      if (latestLoadId !== id) return
       chat.messages = validated
     } catch (err) {
+      if (latestLoadId !== id) return
       console.error('Failed to load v1 conversation:', err)
       toast.error('Failed to load conversation history', {
         description: err instanceof Error ? err.message : 'Unknown error',
