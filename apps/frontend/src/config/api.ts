@@ -8,19 +8,18 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000
 export const API_CONFIG = {
   baseUrl: API_BASE_URL,
   endpoints: {
-    chat: {
-      stream: '/chat/stream',
-      retry: '/chat/stream/retry',
-      edit: '/chat/stream/edit',
-      branch: '/chat/branch',
+    v1Chat: {
+      send: '/api/v1/chat',
+      edit: '/api/v1/chat/edit',
     },
-    conversations: {
-      list: '/conversations',
-      get: (id: string) => `/conversations/${id}`,
-      delete: (id: string) => `/conversations/${id}`,
+    v1Conversations: {
+      list: '/api/v1/conversations',
+      messages: (id: string) => `/api/v1/conversations/${id}/messages`,
+      branch: (id: string) => `/api/v1/conversations/${id}/branch`,
+      delete: (id: string) => `/api/v1/conversations/${id}`,
     },
     models: {
-      list: '/models',
+      list: '/api/v1/models',
     },
     upload: {
       file: '/upload',

@@ -1,40 +1,23 @@
-import fs from "fs";
-import path from "path";
+import { bodyToBuffer } from "./bufferUtils";
 import { fileService } from "../db/fileService";
+import { getObject } from "../services/storageService";
 
 /**
- * Convert a file path to base64 string
- * @param filePath - Path to the file
- * @returns Base64 encoded string of the file
- */
-export async function fileToBase64(filePath: string): Promise<string> {
-  try {
-    const fileBuffer = fs.readFileSync(filePath);
-    return fileBuffer.toString("base64");
-  } catch (error) {
-    console.error("Error reading file:", error);
-    throw new Error(`Failed to read file: ${filePath}`);
-  }
-}
-
-/**
- * Get file path from file ID
+ * Get file key from file ID
  * @param fileId - ID of the file
- * @returns Full file path
+ * @returns S3 object key
  */
-export async function getFilePathById(fileId: number): Promise<string> {
+export async function getFileKeyById(fileId: string): Promise<string> {
   try {
     const fileRecord = await fileService.getFileById(fileId);
     if (!fileRecord) {
       throw new Error(`File with ID ${fileId} not found`);
     }
 
-    // Construct full file path
-    const uploadDir = path.join(__dirname, "../../uploads/");
-    return path.join(uploadDir, fileRecord.path);
+    return fileRecord.key;
   } catch (error) {
-    console.error("Error getting file path:", error);
-    throw new Error(`Failed to get file path for ID ${fileId}`);
+    console.error("Error getting file key:", error);
+    throw new Error(`Failed to get file key for ID ${fileId}`);
   }
 }
 
@@ -44,14 +27,19 @@ export async function getFilePathById(fileId: number): Promise<string> {
  * @returns Array of base64 encoded strings
  */
 export async function convertImageIdsToBase64(
-  fileIds: string[]
+  fileIds: string[],
 ): Promise<string[]> {
   try {
     const base64Images: string[] = [];
 
     for (const fileId of fileIds) {
-      const filePath = await getFilePathById(+fileId);
-      const base64Image = await fileToBase64(filePath);
+      const key = await getFileKeyById(fileId);
+      const object = await getObject(key);
+      if (!object.Body) {
+        throw new Error(`Missing body for object: ${key}`);
+      }
+      const buffer = await bodyToBuffer(object.Body);
+      const base64Image = buffer.toString("base64");
       base64Images.push(base64Image);
     }
 

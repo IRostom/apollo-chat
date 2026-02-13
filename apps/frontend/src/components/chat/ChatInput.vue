@@ -5,11 +5,14 @@ import {
   ChevronDown,
   Brain,
   Globe,
+  Code2,
   Image,
   Mic,
   Square,
   Eye,
   Hammer,
+  FileText,
+  Paperclip,
 } from 'lucide-vue-next'
 import {
   DropdownMenu,
@@ -57,8 +60,21 @@ const isEditing = computed(() => props.editingContent !== undefined)
 
 const appStore = useAppStore()
 // TODO:
-const { data: modelsByFamily, isError: isModelsError, error: modelsError } = useModels()
-const modelFamilies = computed(() => Object.keys(modelsByFamily.value ?? {}))
+const { data: providersResponse, isError: isModelsError, error: modelsError } = useModels()
+const providers = computed(() => providersResponse.value?.providers ?? [])
+const selectedProviderLabel = computed(() => {
+  const providerId = appStore.userSelectedProvider
+  return providers.value.find((provider) => provider.id === providerId)?.label
+})
+const selectedModelLabel = computed(
+  () => appStore.userSelectedModel?.label ?? appStore.userSelectedModel?.name,
+)
+const selectedModelDisplay = computed(() => {
+  if (selectedProviderLabel.value && selectedModelLabel.value) {
+    return `${selectedProviderLabel.value} / ${selectedModelLabel.value}`
+  }
+  return selectedModelLabel.value ?? 'Select Model'
+})
 const { startRecording, stopRecordingAndTranscribe, isRecording, isTranscribing, canRecord } =
   useRecordAndTranscribe((result) => {
     console.log('transcribe result: ', result)
@@ -91,7 +107,10 @@ const userMsg = ref('')
 const userSelectedModelName = computed(() => appStore.userSelectedModelName)
 const canThink = computed(() => appStore.canThink)
 const canUseWebTools = computed(() => appStore.canUseWebTools)
+const canUseCodeTools = computed(() => appStore.canUseCodeTools)
 const supportsVision = computed(() => appStore.supportsVision)
+const supportsPdf = computed(() => appStore.supportsPdf)
+const supportsAttachments = computed(() => appStore.supportsAttachments)
 
 function send() {
   if (props.isStreaming || !userSelectedModelName.value?.length || !userMsg.value.trim()) {
@@ -126,6 +145,25 @@ function updateSelectedModel(model: Model) {
 // }
 
 const fileInputRef = ref<HTMLInputElement | null>(null)
+const fileAccept = computed(() => {
+  if (supportsVision.value && supportsPdf.value) return 'image/*,application/pdf'
+  if (supportsVision.value) return 'image/*'
+  if (supportsPdf.value) return 'application/pdf'
+  return 'image/*,application/pdf'
+})
+
+const attachmentIcon = computed(() => {
+  if (supportsVision.value && supportsPdf.value) return Paperclip
+  if (supportsVision.value) return Image
+  return FileText
+})
+
+const attachmentLabel = computed(() => {
+  if (supportsVision.value && supportsPdf.value) return 'Attach file'
+  if (supportsVision.value) return 'Attach image'
+  if (supportsPdf.value) return 'Attach PDF'
+  return 'Attach file'
+})
 
 function openFilePicker() {
   fileInputRef.value?.click()
@@ -135,6 +173,29 @@ function onFileChange(event: Event) {
   const files = (event.target as HTMLInputElement).files
   if (!files || !files.length) return
   const file = files[0]
+  const isImage = file.type.startsWith('image/')
+  const isPdf = file.type === 'application/pdf'
+
+  if (isImage && !supportsVision.value) {
+    toast.error('Images not supported', {
+      description: 'Please select a model that supports image inputs.',
+    })
+    return
+  }
+
+  if (isPdf && !supportsPdf.value) {
+    toast.error('PDFs not supported', {
+      description: 'Please select a model that supports PDF inputs.',
+    })
+    return
+  }
+
+  if (!isImage && !isPdf) {
+    toast.error('Unsupported file type', {
+      description: 'Only images and PDFs are supported.',
+    })
+    return
+  }
 
   if (files.length === 1) {
     emit('attach', file!)
@@ -189,7 +250,14 @@ onUnmounted(() => {
       <InputGroupAddon align="block-start">
         <div class="flex items-center justify-start gap-3">
           <div v-for="file in filesUrls" :key="file.url" class="border rounded-xl p-1">
-            <img :src="file.url" class="w-14.5 h-14.5" />
+            <img
+              v-if="file.file.type.startsWith('image/')"
+              :src="file.url"
+              class="w-14.5 h-14.5"
+            />
+            <div v-else class="w-14.5 h-14.5 flex items-center justify-center text-muted-foreground">
+              <FileText class="size-5" />
+            </div>
           </div>
         </div>
       </InputGroupAddon>
@@ -206,18 +274,18 @@ onUnmounted(() => {
         <InputGroupButton
           size="icon-sm"
           class="rounded-full"
-          aria-label="Attach file"
-          :disabled="!supportsVision"
+          :aria-label="attachmentLabel"
+          :disabled="!supportsAttachments"
           @click="openFilePicker"
         >
-          <Image />
+          <component :is="attachmentIcon" />
         </InputGroupButton>
         <input
           id="picture"
           type="file"
           class="hidden"
           ref="fileInputRef"
-          accept="image/*"
+          :accept="fileAccept"
           @change="onFileChange"
         />
         <Toggle
@@ -240,25 +308,43 @@ onUnmounted(() => {
           <Globe class="h-4 w-4" />
           Search
         </Toggle>
+        <Toggle
+          size="sm"
+          :modelValue="appStore.useCodeTools"
+          :disabled="!canUseCodeTools"
+          @update:modelValue="appStore.updateUseCodeTools"
+          aria-label="Toggle code execution"
+        >
+          <Code2 class="h-4 w-4" />
+          Code
+        </Toggle>
         <div class="ml-auto flex gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger as-child>
               <InputGroupButton variant="ghost" class="capitalize">
-                {{ userSelectedModelName ?? 'Select Model' }}
+                {{ selectedModelDisplay }}
                 <ChevronDown />
               </InputGroupButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="start" class="[--radius:0.95rem]">
-              <DropdownMenuSub v-for="family in modelFamilies" :key="family">
-                <DropdownMenuSubTrigger class="capitalize">{{ family }}</DropdownMenuSubTrigger>
+              <DropdownMenuSub v-for="provider in providers" :key="provider.id">
+                <DropdownMenuSubTrigger class="capitalize">
+                  {{ provider.label }}
+                  <span v-if="!provider.isAvailable" class="text-xs text-muted-foreground">
+                    (unavailable)
+                  </span>
+                </DropdownMenuSubTrigger>
                 <DropdownMenuPortal>
                   <DropdownMenuSubContent>
+                    <DropdownMenuItem v-if="provider.models.length === 0" disabled>
+                      No models available
+                    </DropdownMenuItem>
                     <DropdownMenuItem
-                      v-for="model in modelsByFamily?.[family] ?? []"
+                      v-for="model in provider.models"
                       :key="model.name"
                       @click="updateSelectedModel(model)"
                       class="capitalize"
-                      >{{ model.name }}
+                      >{{ model.label ?? model.name }}
                       <div v-if="model.vision" class="border border-yellow-300 rounded py-0.5 px-1">
                         <Eye class="size-4 text-yellow-300" />
                       </div>
@@ -270,6 +356,9 @@ onUnmounted(() => {
                         class="border border-green-300 rounded py-0.5 px-1"
                       >
                         <Brain class="size-4 text-green-300" />
+                      </div>
+                      <div v-if="model.pdf" class="border border-red-300 rounded py-0.5 px-1">
+                        <FileText class="size-4 text-red-300" />
                       </div>
                     </DropdownMenuItem>
                   </DropdownMenuSubContent>

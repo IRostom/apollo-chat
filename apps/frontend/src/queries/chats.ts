@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/vue-query'
-import { getConversations } from '@/api/chatService'
+import { getV1Conversations } from '@/api/chatService'
 
 export function useChats() {
   return useQuery({
     queryKey: ['chats'],
     queryFn: async () => {
-      return getConversations()
+      return getV1Conversations()
     },
     initialData: [],
   })

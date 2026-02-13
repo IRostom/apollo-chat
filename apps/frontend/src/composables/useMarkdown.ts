@@ -16,7 +16,7 @@ import MarkdownItCopyCode from 'markdown-it-copy-code'
 // hljs.addPlugin(new CopyButtonPlugin())
 // const md = markdownit().use(markdownItHighlightjs)
 const md = markdownit({
-  html: true,
+  html: false, // Disable raw HTML to prevent XSS when rendering with v-html
   linkify: true,
 })
   .use(markdownItHighlightjs)

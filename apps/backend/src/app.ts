@@ -1,13 +1,14 @@
 import express, { Express } from "express";
 import "dotenv/config";
 import corsMiddleware from "./plugins/cors";
-import chatRouter from "./routes/chat";
-import conversationRouter from "./routes/conversation";
 import ollamaRouter from "./routes/ollamaRouter";
 import uploadRouter from "./routes/upload";
 import transcribeRouter from "./routes/transcribe";
-import path from "path";
 import modelsRouter from "./routes/models";
+// V1 API routes (AI SDK)
+import v1ChatRouter from "./routes/v1/chat";
+import v1ConversationRouter from "./routes/v1/conversation";
+import v1ModelsRouter from "./routes/v1/models";
 
 const app: Express = express();
 
@@ -31,14 +32,14 @@ app.use(express.json());
 app.use(corsMiddleware);
 
 // Routes
-app.use("/", chatRouter);
-app.use("/", conversationRouter);
 app.use("/", ollamaRouter);
 app.use("/", uploadRouter);
 app.use("/", transcribeRouter);
 app.use("/", modelsRouter);
-// Serve static files from uploads directory
-const uploadDir = path.join(__dirname, "../uploads");
-app.use("/uploads", express.static(uploadDir));
+
+// V1 API routes (AI SDK based)
+app.use("/api/v1/chat", v1ChatRouter);
+app.use("/api/v1/conversations", v1ConversationRouter);
+app.use("/api/v1/models", v1ModelsRouter);
 
 export default app;

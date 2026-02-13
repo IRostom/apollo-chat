@@ -1,16 +1,15 @@
 import { useMutation, useQueryClient } from '@tanstack/vue-query'
-import { deleteConversation } from '@/api/chatService'
+import { deleteV1Conversation } from '@/api/chatService'
 
 export function useDeleteConversation() {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: (conversationId: string) => {
-      return deleteConversation(conversationId)
+      return deleteV1Conversation(conversationId)
     },
-    onSuccess: (_data, conversationId) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['chats'] })
-      queryClient.removeQueries({ queryKey: ['chat', conversationId] })
     },
   })
 }

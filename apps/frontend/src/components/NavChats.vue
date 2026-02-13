@@ -22,12 +22,18 @@ import {
 import { useDeleteConversation } from '@/queries/useDeleteConversation'
 import { toast } from 'vue-sonner'
 
-defineProps<{
-  chats: {
-    title: string
-    id: string | number
-  }[]
-}>()
+const props = withDefaults(
+  defineProps<{
+    chats: {
+      title: string
+      id: string | number
+    }[]
+    routePrefix?: string
+  }>(),
+  {
+    routePrefix: '/',
+  },
+)
 
 const { isMobile } = useSidebar()
 const route = useRoute()
@@ -45,7 +51,7 @@ function handleDeleteClick(chatId: string) {
 
 function handleDeleteSuccess(conversationId: string) {
   if (route.params.id?.toString() === conversationId) {
-    router.push('/')
+    router.push(props.routePrefix)
   }
   if (confirmDeleteChatId.value === conversationId) {
     confirmDeleteChatId.value = null
@@ -65,7 +71,7 @@ function handleDeleteError(error: Error) {
     <SidebarMenu>
       <SidebarMenuItem v-for="chat in chats" :key="chat.id">
         <SidebarMenuButton as-child :is-active="chat.id.toString() === route.params.id">
-          <RouterLink :to="'/' + chat.id">
+          <RouterLink :to="`${props.routePrefix.replace(/\/$/, '')}/${chat.id}`">
             <span>{{ chat.title }}</span>
           </RouterLink>
         </SidebarMenuButton>
@@ -93,7 +99,7 @@ function handleDeleteError(error: Error) {
           :is-deleting="isDeletingConversation"
           @update:open="(isOpen) => (confirmDeleteChatId = isOpen ? chat.id.toString() : null)" @confirm="
             deleteConversationMutation(chat.id.toString(), {
-              onSuccess: (_data, conversationId) => handleDeleteSuccess(conversationId),
+              onSuccess: (_data: any, conversationId: string) => handleDeleteSuccess(conversationId),
               onError: handleDeleteError,
             })
             " />

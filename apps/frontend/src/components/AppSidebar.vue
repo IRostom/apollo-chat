@@ -44,7 +44,7 @@ watch(isError, (isError) => {
   if (isError) {
     toast.error(
       'Failed to fetch chats: ' +
-        (error.value instanceof Error ? error.value.message : 'Unknown error'),
+      (error.value instanceof Error ? error.value.message : 'Unknown error'),
     )
   }
 })
@@ -68,7 +68,7 @@ watch(isError, (isError) => {
     </SidebarHeader>
     <SidebarContent>
       <NavMain :items="data.navMain" class="sticky top-0 z-10 bg-sidebar" />
-      <NavChats :chats="chats" />
+      <NavChats :chats="chats" :route-prefix="'/'" />
     </SidebarContent>
     <SidebarFooter> </SidebarFooter>
     <SidebarRail />
