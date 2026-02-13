@@ -29,15 +29,11 @@ export const fileService = {
     return file;
   },
 
-  async getFileById(id: string, userId?: string): Promise<FileRecord | null> {
-    const conditions = [eq(filesTable.id, id)];
-    if (userId) {
-      conditions.push(eq(filesTable.user_id, userId));
-    }
+  async getFileById(id: string, userId: string): Promise<FileRecord | null> {
     const file = await db
       .select()
       .from(filesTable)
-      .where(and(...conditions))
+      .where(and(eq(filesTable.id, id), eq(filesTable.user_id, userId)))
       .limit(1);
 
     return file[0] || null;
@@ -50,11 +46,9 @@ export const fileService = {
       .where(eq(filesTable.user_id, userId));
   },
 
-  async deleteFileById(id: string, userId?: string): Promise<void> {
-    const conditions = [eq(filesTable.id, id)];
-    if (userId) {
-      conditions.push(eq(filesTable.user_id, userId));
-    }
-    await db.delete(filesTable).where(and(...conditions));
+  async deleteFileById(id: string, userId: string): Promise<void> {
+    await db
+      .delete(filesTable)
+      .where(and(eq(filesTable.id, id), eq(filesTable.user_id, userId)));
   },
 };

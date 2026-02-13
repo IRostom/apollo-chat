@@ -162,25 +162,20 @@ export async function branchConversation(
 
 /**
  * Delete a conversation and all its messages (scoped to user).
- * Uses a transaction so both deletes succeed or both roll back.
+ * Messages are automatically deleted via onDelete: "cascade" on the FK.
  */
 export async function deleteAIConversation(
   id: number,
   userId: string
 ): Promise<void> {
-  await db.transaction(async (tx) => {
-    await tx
-      .delete(aiMessagesTable)
-      .where(eq(aiMessagesTable.conversation_id, id));
-    await tx
-      .delete(aiConversationsTable)
-      .where(
-        and(
-          eq(aiConversationsTable.id, id),
-          eq(aiConversationsTable.user_id, userId)
-        )
-      );
-  });
+  await db
+    .delete(aiConversationsTable)
+    .where(
+      and(
+        eq(aiConversationsTable.id, id),
+        eq(aiConversationsTable.user_id, userId)
+      )
+    );
 }
 
 // ============================================================================
