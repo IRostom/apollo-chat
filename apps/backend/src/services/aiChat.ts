@@ -182,12 +182,14 @@ export async function saveUIMessage(
   if (!message.id) {
     throw new Error("UIMessage.id is required for persistence");
   }
+  const now = Math.floor(Date.now() / 1000);
   await db.insert(aiMessagesTable).values({
     id: message.id,
     conversation_id: conversationId,
     role: message.role,
     message: JSON.stringify(message),
     metadata: serializeJSON(metadata),
+    created_at: now,
   });
 }
 
@@ -202,6 +204,7 @@ export async function saveUIMessages(
 ): Promise<void> {
   if (messages.length === 0) return;
 
+  const base = Math.floor(Date.now() / 1000);
   const rows = messages.map((msg, i) => ({
     id: msg.id,
     conversation_id: conversationId,
@@ -209,6 +212,7 @@ export async function saveUIMessages(
     message: JSON.stringify(msg),
     metadata:
       i === messages.length - 1 ? serializeJSON(metadata) : null,
+    created_at: base + i,
   }));
 
   if (rows.some((row) => !row.id)) {
