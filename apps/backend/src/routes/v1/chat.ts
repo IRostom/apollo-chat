@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { body, validationResult } from "express-validator";
+import { getAuth } from "@clerk/express";
 import {
   streamText,
   convertToModelMessages,
@@ -161,6 +162,11 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
     return res.status(400).json({ errors: errors.array() });
   }
 
+  const { userId } = getAuth(req);
+  if (!userId) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
   const {
     provider,
     model,
@@ -196,6 +202,12 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
     }
 
     try {
+      // Verify conversation belongs to user
+      const conv = await getAIConversation(convId, userId);
+      if (!conv) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
+
       // Load message rows with DB IDs
       const rows = await getMessageRows(convId);
 
@@ -229,9 +241,6 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
       // Remaining messages
     const remainingMessages = rows.slice(0, targetIdx).map((r) => r.uiMessage);
 
-      // Get conversation for system prompt
-      const conversation = await getAIConversation(convId);
-
       // Expand file parts for the target provider before conversion
       const expandedMessages = await expandUIMessagesForProvider(
         remainingMessages,
@@ -251,7 +260,7 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
       const result = streamText({
         model: modelInstance as any,
         messages: modelMessages as any,
-        system: conversation?.system_prompt ?? undefined,
+        system: conv?.system_prompt ?? undefined,
         tools: Object.keys(tools).length > 0 ? tools : undefined,
         stopWhen: stepCountIs(10),
         onError: ({ error }) => {
@@ -349,10 +358,11 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
         provider: internalProvider,
         model,
         system_prompt: systemPrompt,
+        user_id: userId,
       });
       console.log("New AI conversation created:", convId);
     } else {
-      const existing = await getAIConversation(convId);
+      const existing = await getAIConversation(convId, userId);
       if (!existing) {
         return res.status(404).json({ error: "Conversation not found" });
       }
@@ -477,6 +487,11 @@ router.post("/edit", editValidation, async (req: Request, res: Response) => {
     return res.status(400).json({ errors: errors.array() });
   }
 
+  const { userId } = getAuth(req);
+  if (!userId) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
   const {
     provider,
     model,
@@ -505,6 +520,12 @@ router.post("/edit", editValidation, async (req: Request, res: Response) => {
   }
 
   try {
+    // Verify conversation belongs to user
+    const conv = await getAIConversation(convId, userId);
+    if (!conv) {
+      return res.status(404).json({ error: "Conversation not found" });
+    }
+
     // Load message rows with DB IDs
     const rows = await getMessageRows(convId);
     const targetIdx = rows.findIndex((r) => r.uiMessage.id === messageId);
@@ -549,9 +570,6 @@ router.post("/edit", editValidation, async (req: Request, res: Response) => {
       updatedMessage,
     ];
 
-    // Get conversation for system prompt
-    const conversation = await getAIConversation(convId);
-
     // Expand file parts for the target provider before conversion
     const expandedMessages = await expandUIMessagesForProvider(
       remainingMessages,
@@ -571,7 +589,7 @@ router.post("/edit", editValidation, async (req: Request, res: Response) => {
     const result = streamText({
       model: modelInstance as any,
       messages: modelMessages as any,
-      system: conversation?.system_prompt ?? undefined,
+      system: conv?.system_prompt ?? undefined,
       tools: Object.keys(tools).length > 0 ? tools : undefined,
       stopWhen: stepCountIs(10),
       onError: ({ error }) => {

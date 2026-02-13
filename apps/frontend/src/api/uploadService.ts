@@ -4,15 +4,16 @@
  */
 
 import { getApiUrl, API_CONFIG } from '@/config/api'
+import { authFetch } from '@/lib/auth'
 import type { uploadedFile } from '@/types/file'
 
 /**
- * Get a conversation by ID
+ * Upload a file
  */
 export async function uploadFile(file: File): Promise<uploadedFile> {
   const formData = new FormData()
   formData.append('file', file)
-  const response = await fetch(getApiUrl(API_CONFIG.endpoints.upload.file), {
+  const response = await authFetch(getApiUrl(API_CONFIG.endpoints.upload.file), {
     method: 'POST',
     body: formData,
   })

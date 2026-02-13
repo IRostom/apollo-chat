@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@ai-sdk/vue": "^3.0.75",
+    "@clerk/vue": "^1.17.13",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/vue-query": "^5.92.1",
     "@vueuse/core": "^14.1.0",

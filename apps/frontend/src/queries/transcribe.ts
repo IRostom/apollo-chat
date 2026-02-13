@@ -1,4 +1,5 @@
 import { getApiUrl, API_CONFIG } from '@/config/api'
+import { authFetch } from '@/lib/auth'
 
 export interface TranscriptionResult {
   text: string
@@ -11,7 +12,7 @@ export async function transcribe(audio: Blob, model?: string): Promise<Transcrip
   if (model) {
     formData.append('model', model)
   }
-  const response = await fetch(getApiUrl(API_CONFIG.endpoints.transcribe), {
+  const response = await authFetch(getApiUrl(API_CONFIG.endpoints.transcribe), {
     method: 'POST',
     body: formData,
   })

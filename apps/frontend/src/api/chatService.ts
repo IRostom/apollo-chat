@@ -3,6 +3,7 @@
  */
 
 import { getApiUrl, API_CONFIG } from '@/config/api'
+import { authFetch } from '@/lib/auth'
 import type { Conversation } from '@/types/chat'
 import type { UIMessage } from 'ai'
 
@@ -10,7 +11,7 @@ import type { UIMessage } from 'ai'
  * Get all v1 conversations
  */
 export async function getV1Conversations(): Promise<Conversation[]> {
-  const response = await fetch(getApiUrl(API_CONFIG.endpoints.v1Conversations.list))
+  const response = await authFetch(getApiUrl(API_CONFIG.endpoints.v1Conversations.list))
 
   if (!response.ok) {
     throw new Error(`network response failed: ${response.statusText}`)
@@ -23,7 +24,7 @@ export async function getV1Conversations(): Promise<Conversation[]> {
  * Get messages for a v1 conversation in UIMessage format
  */
 export async function getV1ConversationMessages(id: string): Promise<UIMessage[]> {
-  const response = await fetch(getApiUrl(API_CONFIG.endpoints.v1Conversations.messages(id)))
+  const response = await authFetch(getApiUrl(API_CONFIG.endpoints.v1Conversations.messages(id)))
 
   if (!response.ok) {
     const res = await response.json().catch(() => ({ error: 'Failed to fetch v1 chat history' }))
@@ -62,7 +63,7 @@ export function editV1Message(params: EditV1MessageParams): Promise<Response> {
     signal,
   } = params
 
-  return fetch(getApiUrl(API_CONFIG.endpoints.v1Chat.edit), {
+  return authFetch(getApiUrl(API_CONFIG.endpoints.v1Chat.edit), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal,
@@ -89,7 +90,7 @@ export async function branchV1Conversation(
   conversationId: string,
   messageId: string
 ): Promise<string> {
-  const response = await fetch(
+  const response = await authFetch(
     getApiUrl(API_CONFIG.endpoints.v1Conversations.branch(conversationId)),
     {
       method: 'POST',
@@ -111,7 +112,7 @@ export async function branchV1Conversation(
  * Delete a v1 conversation
  */
 export async function deleteV1Conversation(id: string): Promise<void> {
-  const response = await fetch(getApiUrl(API_CONFIG.endpoints.v1Conversations.delete(id)), {
+  const response = await authFetch(getApiUrl(API_CONFIG.endpoints.v1Conversations.delete(id)), {
     method: 'DELETE',
   })
 
