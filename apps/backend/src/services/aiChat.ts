@@ -76,16 +76,17 @@ export async function createAIConversation(
  */
 export async function getAIConversation(
   id: number,
-  userId?: string
+  userId: string
 ): Promise<AIConversation | undefined> {
-  const conditions = [eq(aiConversationsTable.id, id)];
-  if (userId) {
-    conditions.push(eq(aiConversationsTable.user_id, userId));
-  }
   const [conv] = await db
     .select()
     .from(aiConversationsTable)
-    .where(and(...conditions));
+    .where(
+      and(
+        eq(aiConversationsTable.id, id),
+        eq(aiConversationsTable.user_id, userId)
+      )
+    );
   return conv;
 }
 
