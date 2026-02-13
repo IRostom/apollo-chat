@@ -100,7 +100,10 @@ const chatValidation = [
     .optional()
     .isArray()
     .withMessage("Message parts must be an array"),
-  body("conversationId").optional().isString(),
+  body("conversationId")
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage("conversationId must be a positive integer"),
   body("messageId").optional().isString(),
   body("systemPrompt").optional().isString(),
   body("enableWebTools").optional().isBoolean(),
@@ -129,9 +132,8 @@ const editValidation = [
   body("model").isString().notEmpty().withMessage("Model is required"),
   body("messageId").isString().notEmpty().withMessage("messageId is required"),
   body("conversationId")
-    .isString()
-    .notEmpty()
-    .withMessage("conversationId is required"),
+    .isInt({ min: 1 })
+    .withMessage("conversationId must be a positive integer"),
   body("content").isString().notEmpty().withMessage("content is required"),
   body("enableWebTools").optional().isBoolean(),
   body("enableCodeTools").optional().isBoolean(),
@@ -187,6 +189,11 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
     }
 
     const convId = parseInt(conversationId, 10);
+    if (Number.isNaN(convId) || convId < 1) {
+      return res
+        .status(400)
+        .json({ error: "conversationId must be a positive integer" });
+    }
 
     try {
       // Load message rows with DB IDs
@@ -254,6 +261,24 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
 
       if (responseFormat === "text") {
         result.pipeTextStreamToResponse(res);
+      void Promise.resolve(result.text as Promise<string>)
+        .then(async (fullText) => {
+          try {
+            const usage = await result.usage;
+            const responseMessage: UIMessage = {
+              id: generateMessageId(),
+              role: "assistant",
+              parts: [{ type: "text" as const, text: fullText }],
+            };
+            await saveUIMessage(convId, responseMessage, { usage });
+            console.log("Regenerate text completed:", { convId, usage });
+          } catch (err) {
+            console.error("Failed to persist regenerate text response:", err);
+          }
+        })
+        .catch((err: unknown) =>
+          console.error("Regenerate text stream error:", err),
+        );
       } else {
         result.pipeUIMessageStreamToResponse(res, {
           sendReasoning: true,
@@ -284,7 +309,16 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
     return;
   }
 
-  let convId = conversationId ? parseInt(conversationId, 10) : null;
+  let convId: number | null = null;
+  if (conversationId) {
+    const parsed = parseInt(conversationId, 10);
+    if (Number.isNaN(parsed) || parsed < 1) {
+      return res
+        .status(400)
+        .json({ error: "conversationId must be a positive integer" });
+    }
+    convId = parsed;
+  }
 
   if (!message) {
     return res.status(400).json({ error: "message is required" });
@@ -312,6 +346,11 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
         system_prompt: systemPrompt,
       });
       console.log("New AI conversation created:", convId);
+    } else {
+      const existing = await getAIConversation(convId);
+      if (!existing) {
+        return res.status(404).json({ error: "Conversation not found" });
+      }
     }
 
     // Load existing UIMessages from DB
@@ -359,6 +398,29 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
 
     if (responseFormat === "text") {
       result.pipeTextStreamToResponse(res);
+      void Promise.resolve(result.text as Promise<string>)
+        .then(async (fullText) => {
+          try {
+            const usage = await result.usage;
+            const responseMessage: UIMessage = {
+              id: generateMessageId(),
+              role: "assistant",
+              parts: [{ type: "text" as const, text: fullText }],
+            };
+            await saveUIMessage(
+              conversationIdForCallback,
+              responseMessage,
+              { usage },
+            );
+            console.log("Text chat completed:", {
+              convId: conversationIdForCallback,
+              usage,
+            });
+          } catch (err) {
+            console.error("Failed to persist text response:", err);
+          }
+        })
+        .catch((err: unknown) => console.error("Text stream error:", err));
     } else {
       // Pipe UI message stream with persistence in onFinish
       result.pipeUIMessageStreamToResponse(res, {
@@ -418,6 +480,11 @@ router.post("/edit", editValidation, async (req: Request, res: Response) => {
   } = req.body as EditRequestBody;
 
   const convId = parseInt(conversationId, 10);
+  if (Number.isNaN(convId) || convId < 1) {
+    return res
+      .status(400)
+      .json({ error: "conversationId must be a positive integer" });
+  }
 
   const internalProvider = mapApiProvider(provider);
 
@@ -492,6 +559,24 @@ router.post("/edit", editValidation, async (req: Request, res: Response) => {
 
     if (responseFormat === "text") {
       result.pipeTextStreamToResponse(res);
+      void Promise.resolve(result.text as Promise<string>)
+        .then(async (fullText) => {
+          try {
+            const usage = await result.usage;
+            const responseMessage: UIMessage = {
+              id: generateMessageId(),
+              role: "assistant",
+              parts: [{ type: "text" as const, text: fullText }],
+            };
+            await saveUIMessage(convId, responseMessage, { usage });
+            console.log("Edit text completed:", { convId, usage });
+          } catch (err) {
+            console.error("Failed to persist edit text response:", err);
+          }
+        })
+        .catch((err: unknown) =>
+          console.error("Edit text stream error:", err),
+        );
     } else {
       result.pipeUIMessageStreamToResponse(res, {
         sendReasoning: true,

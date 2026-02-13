@@ -23,9 +23,8 @@ async function bodyToBuffer(body: unknown): Promise<Buffer> {
     return Buffer.from(await anyBody.transformToByteArray());
   }
 
-  const getReader = anyBody?.getReader;
-  if (typeof getReader === "function") {
-    const reader = getReader();
+  if (typeof anyBody?.getReader === "function") {
+    const reader = (body as ReadableStream<Uint8Array>).getReader();
     const chunks: Buffer[] = [];
     while (true) {
       const { done, value } = await reader.read();
@@ -35,15 +34,15 @@ async function bodyToBuffer(body: unknown): Promise<Buffer> {
     return Buffer.concat(chunks);
   }
 
-  const on = anyBody?.on;
-  if (typeof on === "function") {
+  if (typeof anyBody?.on === "function") {
+    const stream = body as NodeJS.ReadableStream;
     return new Promise((resolve, reject) => {
       const chunks: Buffer[] = [];
-      on("data", (chunk) => {
+      stream.on("data", (chunk) => {
         chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as any));
       });
-      on("end", () => resolve(Buffer.concat(chunks)));
-      on("error", reject);
+      stream.on("end", () => resolve(Buffer.concat(chunks)));
+      stream.on("error", reject);
     });
   }
 

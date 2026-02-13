@@ -51,8 +51,7 @@ function handleDeleteClick(chatId: string) {
 
 function handleDeleteSuccess(conversationId: string) {
   if (route.params.id?.toString() === conversationId) {
-    // Navigate to the base route
-    router.push('/')
+    router.push(props.routePrefix)
   }
   if (confirmDeleteChatId.value === conversationId) {
     confirmDeleteChatId.value = null
@@ -72,7 +71,7 @@ function handleDeleteError(error: Error) {
     <SidebarMenu>
       <SidebarMenuItem v-for="chat in chats" :key="chat.id">
         <SidebarMenuButton as-child :is-active="chat.id.toString() === route.params.id">
-          <RouterLink :to="props.routePrefix + chat.id">
+          <RouterLink :to="`${props.routePrefix.replace(/\/$/, '')}/${chat.id}`">
             <span>{{ chat.title }}</span>
           </RouterLink>
         </SidebarMenuButton>

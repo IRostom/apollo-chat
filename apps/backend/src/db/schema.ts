@@ -1,4 +1,4 @@
-import { int, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { int, sqliteTable, text, index } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 export const filesTable = sqliteTable("files_table", {
@@ -31,7 +31,9 @@ export const conversationsTable = sqliteTable("conversations_table", {
 
 export const messagesTable = sqliteTable("messages_table", {
   id: int().primaryKey({ autoIncrement: true }),
-  conversation_id: int().references(() => conversationsTable.id),
+  conversation_id: int()
+    .notNull()
+    .references(() => conversationsTable.id, { onDelete: "cascade" }),
   content: text().notNull(),
   thinking: text(),
   tool_calls: text(),
@@ -63,15 +65,19 @@ export const aiConversationsTable = sqliteTable("ai_conversations", {
     .$onUpdate(() => sql`(current_timestamp)`),
 });
 
-export const aiMessagesTable = sqliteTable("ai_messages", {
-  id: text().primaryKey().notNull(),
-  conversation_id: int()
-    .notNull()
-    .references(() => aiConversationsTable.id),
+export const aiMessagesTable = sqliteTable(
+  "ai_messages",
+  {
+    id: text().primaryKey().notNull(),
+    conversation_id: int()
+      .notNull()
+      .references(() => aiConversationsTable.id, { onDelete: "cascade" }),
   role: text().notNull(), // 'user' | 'assistant' — from UIMessage.role
   message: text().notNull(), // JSON-serialized UIMessage from AI SDK
   metadata: text(), // JSON string for usage stats, finish reason, etc.
   created_at: int()
     .notNull()
     .default(sql`(unixepoch())`),
-});
+  },
+  (t) => [index("ai_messages_conversation_id_idx").on(t.conversation_id)],
+);
