@@ -164,6 +164,7 @@ export function useV1Chat() {
 
   const editingMessage = ref<{ id: string; content: string } | null>(null)
   const isEditStreaming = ref(false)
+  const editAbortController = ref<AbortController | null>(null)
 
   function startEdit(message: { id: string; content: string }) {
     editingMessage.value = message
@@ -231,6 +232,9 @@ export function useV1Chat() {
     isEditStreaming.value = true
 
     try {
+      editAbortController.value?.abort()
+      const controller = new AbortController()
+      editAbortController.value = controller
       const response = await editV1Message({
         conversationId: chatConversationId.value,
         messageId: msg.id,
@@ -240,6 +244,7 @@ export function useV1Chat() {
         enableWebTools: appStore.canUseWebTools && appStore.useWebTools,
         enableCodeTools: appStore.canUseCodeTools && appStore.useCodeTools,
         enableThinking: appStore.canThink && appStore.shouldThink,
+        signal: controller.signal,
       })
 
       if (!response.ok) {
@@ -269,12 +274,14 @@ export function useV1Chat() {
 
       queryClient.invalidateQueries({ queryKey: ['chats'] })
     } catch (err) {
+      if ((err as Error)?.name === 'AbortError') return
       console.error('Edit error:', err)
       toast.error('Edit failed', {
         description: err instanceof Error ? err.message : 'An error occurred',
       })
     } finally {
       isEditStreaming.value = false
+      editAbortController.value = null
     }
   }
 
@@ -335,6 +342,10 @@ export function useV1Chat() {
    * Stop the current streaming response.
    */
   async function stop() {
+    if (isEditStreaming.value && editAbortController.value) {
+      editAbortController.value.abort()
+      return
+    }
     await chat.stop()
   }
 

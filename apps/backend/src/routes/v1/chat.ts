@@ -335,6 +335,7 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
   }
 
   try {
+    let effectiveSystemPrompt = systemPrompt;
     // Create conversation if needed
     if (!convId) {
       const titleText =
@@ -355,6 +356,7 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
       if (!existing) {
         return res.status(404).json({ error: "Conversation not found" });
       }
+      effectiveSystemPrompt = existing.system_prompt ?? systemPrompt;
     }
 
     // Load existing UIMessages from DB
@@ -387,7 +389,7 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
     const result = streamText({
       model: modelInstance as any,
       messages: modelMessages as any,
-      system: systemPrompt,
+      system: effectiveSystemPrompt ?? undefined,
       tools: Object.keys(tools).length > 0 ? tools : undefined,
       stopWhen: stepCountIs(10),
       onError: ({ error }) => {

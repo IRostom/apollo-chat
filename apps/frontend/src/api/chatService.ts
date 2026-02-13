@@ -42,6 +42,7 @@ export interface EditV1MessageParams {
   enableWebTools?: boolean
   enableCodeTools?: boolean
   enableThinking?: boolean
+  signal?: AbortSignal
 }
 
 /**
@@ -58,11 +59,13 @@ export function editV1Message(params: EditV1MessageParams): Promise<Response> {
     enableWebTools = false,
     enableCodeTools = false,
     enableThinking = false,
+    signal,
   } = params
 
   return fetch(getApiUrl(API_CONFIG.endpoints.v1Chat.edit), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    signal,
     body: JSON.stringify({
       provider,
       model,
