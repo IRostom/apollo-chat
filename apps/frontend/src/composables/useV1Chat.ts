@@ -203,11 +203,24 @@ export function useV1Chat() {
       return
     }
 
+    // Preserve non-text parts (images, files) when editing
+    const originalParts = originalMsg.parts ?? []
+    let textReplaced = false
+    const updatedParts = originalParts.map((p) => {
+      if (p.type === 'text' && !textReplaced) {
+        textReplaced = true
+        return { type: 'text' as const, text: newContent }
+      }
+      return p
+    })
+    if (!textReplaced) {
+      updatedParts.push({ type: 'text' as const, text: newContent })
+    }
     const updatedUserMessage: UIMessage = {
       ...originalMsg,
       id: originalMsg.id ?? msg.id,
       role: 'user',
-      parts: [{ type: 'text' as const, text: newContent }],
+      parts: updatedParts,
     }
     const messagesBeforeEdit = [
       ...chat.messages.slice(0, targetIdx),

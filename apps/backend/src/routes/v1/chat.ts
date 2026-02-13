@@ -286,12 +286,16 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
           originalMessages: remainingMessages,
           generateMessageId,
           onFinish: async ({ responseMessage, finishReason }) => {
-            const usage = await result.usage;
-            await saveUIMessage(convId, responseMessage, {
-              usage,
-              finishReason,
-            });
-            console.log("Regenerate completed:", { convId, finishReason, usage });
+            try {
+              const usage = await result.usage;
+              await saveUIMessage(convId, responseMessage, {
+                usage,
+                finishReason,
+              });
+              console.log("Regenerate completed:", { convId, finishReason, usage });
+            } catch (err) {
+              console.error("Failed to persist regenerate messages:", err);
+            }
           },
         });
       }
@@ -429,16 +433,20 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
         originalMessages: allMessages,
         generateMessageId,
         onFinish: async ({ responseMessage, finishReason }) => {
-          const usage = await result.usage;
-          await saveUIMessage(conversationIdForCallback, responseMessage, {
-            usage,
-            finishReason,
-          });
-          console.log("Chat completed:", {
-            convId: conversationIdForCallback,
-            finishReason,
-            usage,
-          });
+          try {
+            const usage = await result.usage;
+            await saveUIMessage(conversationIdForCallback, responseMessage, {
+              usage,
+              finishReason,
+            });
+            console.log("Chat completed:", {
+              convId: conversationIdForCallback,
+              finishReason,
+              usage,
+            });
+          } catch (err) {
+            console.error("Failed to persist chat messages:", err);
+          }
         },
       });
     }
@@ -596,12 +604,16 @@ router.post("/edit", editValidation, async (req: Request, res: Response) => {
         originalMessages: remainingMessages,
         generateMessageId,
         onFinish: async ({ responseMessage, finishReason }) => {
-          const usage = await result.usage;
-          await saveUIMessage(convId, responseMessage, {
-            usage,
-            finishReason,
-          });
-          console.log("Edit completed:", { convId, finishReason, usage });
+          try {
+            const usage = await result.usage;
+            await saveUIMessage(convId, responseMessage, {
+              usage,
+              finishReason,
+            });
+            console.log("Edit completed:", { convId, finishReason, usage });
+          } catch (err) {
+            console.error("Failed to persist edit messages:", err);
+          }
         },
       });
     }
