@@ -33,6 +33,50 @@ export async function getV1ConversationMessages(id: string): Promise<UIMessage[]
   return response.json()
 }
 
+export interface EditV1MessageParams {
+  conversationId: string
+  messageId: string
+  content: string
+  provider: string
+  model: string
+  enableWebTools?: boolean
+  enableCodeTools?: boolean
+  enableThinking?: boolean
+}
+
+/**
+ * Edit a user message and regenerate the response.
+ * Returns the raw Response so the caller can consume the UIMessage stream.
+ */
+export function editV1Message(params: EditV1MessageParams): Promise<Response> {
+  const {
+    conversationId,
+    messageId,
+    content,
+    provider,
+    model,
+    enableWebTools = false,
+    enableCodeTools = false,
+    enableThinking = false,
+  } = params
+
+  return fetch(getApiUrl(API_CONFIG.endpoints.v1Chat.edit), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      provider,
+      model,
+      messageId,
+      conversationId,
+      content,
+      enableWebTools,
+      enableCodeTools,
+      enableThinking,
+      responseFormat: 'ui',
+    }),
+  })
+}
+
 /**
  * Delete a v1 conversation
  */

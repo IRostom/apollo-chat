@@ -5,14 +5,38 @@ import V1ChatMessages from './V1ChatMessages.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import { toast } from 'vue-sonner'
 
-const { messages, isStreaming, isEmpty, sendMessage, regenerate, stop } = useV1Chat()
+const {
+    messages,
+    isStreaming,
+    isEmpty,
+    editingMessage,
+    startEdit,
+    cancelEdit,
+    submitEdit,
+    sendMessage,
+    regenerate,
+    stop,
+} = useV1Chat()
 const { files, uploadFile, reset } = useUploadFile()
 
 async function handleSend(message: string) {
-    const didSend = await sendMessage(message, files.value)
-    if (didSend) {
+    if (editingMessage.value) {
+        await submitEdit(message)
         reset()
+    } else {
+        const didSend = await sendMessage(message, files.value)
+        if (didSend) {
+            reset()
+        }
     }
+}
+
+function handleEdit(payload: { id: string; content: string }) {
+    startEdit(payload)
+}
+
+function handleCancelEdit() {
+    cancelEdit()
 }
 
 async function handleRetry(messageId: string) {
@@ -56,9 +80,11 @@ async function handleCopy(content: string) {
                     <ChatInput
                         :is-streaming="isStreaming"
                         :files="files"
+                        :editing-content="editingMessage?.content"
                         @send="handleSend"
                         @stop="handleStop"
                         @attach="handleAttach"
+                        @cancel-edit="handleCancelEdit"
                     />
                 </div>
             </div>
@@ -66,7 +92,13 @@ async function handleCopy(content: string) {
 
         <!-- Messages -->
         <div v-else class="flex-1 overflow-auto">
-            <V1ChatMessages :messages="messages" :is-streaming="isStreaming" @retry="handleRetry" @copy="handleCopy" />
+            <V1ChatMessages
+                :messages="messages"
+                :is-streaming="isStreaming"
+                @retry="handleRetry"
+                @copy="handleCopy"
+                @edit="handleEdit"
+            />
         </div>
 
         <!-- Input (shown when messages exist) -->
@@ -74,9 +106,11 @@ async function handleCopy(content: string) {
             v-if="!isEmpty"
             :is-streaming="isStreaming"
             :files="files"
+            :editing-content="editingMessage?.content"
             @send="handleSend"
             @stop="handleStop"
             @attach="handleAttach"
+            @cancel-edit="handleCancelEdit"
         />
     </div>
 </template>

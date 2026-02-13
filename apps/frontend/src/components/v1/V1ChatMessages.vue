@@ -16,6 +16,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
     retry: [messageId: string]
     copy: [content: string]
+    edit: [payload: { id: string; content: string }]
 }>()
 
 function isLastMessage(index: number) {
@@ -37,7 +38,7 @@ const showPendingIndicator = computed(() => {
             :class="{ 'pt-12 pb-12': msg.role === 'user', 'pb-12': msg.role !== 'user' }">
             <div class="mx-auto max-w-3xl">
                 <V1ChatMessage :message="msg" :is-loading="isStreaming && isLastMessage(index)"
-                    @retry="emit('retry', $event)" @copy="emit('copy', $event)" />
+                    @retry="emit('retry', $event)" @copy="emit('copy', $event)" @edit="emit('edit', $event)" />
             </div>
         </article>
 

@@ -305,7 +305,6 @@ router.post("/", chatValidation, async (req: Request, res: Response) => {
           .map((p: any) => p.text)
           .join("")
           .slice(0, 50) || "New Chat";
-
       convId = await createAIConversation({
         title: titleText,
         provider: internalProvider,

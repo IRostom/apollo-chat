@@ -10,14 +10,22 @@
  */
 
 import { Chat } from '@ai-sdk/vue'
-import { DefaultChatTransport, validateUIMessages, type FileUIPart, type UIMessage } from 'ai'
+import {
+  DefaultChatTransport,
+  parseJsonEventStream,
+  readUIMessageStream,
+  uiMessageChunkSchema,
+  validateUIMessages,
+  type FileUIPart,
+  type UIMessage,
+} from 'ai'
 import { computed, ref, shallowRef, watch } from 'vue'
 import { useV1ConversationRoute } from './useV1ConversationRoute'
 import { useAppStore } from '@/stores/app'
 import { getApiUrl, API_CONFIG } from '@/config/api'
 import { useQueryClient } from '@tanstack/vue-query'
 import { toast } from 'vue-sonner'
-import { getV1ConversationMessages } from '@/api/chatService'
+import { editV1Message, getV1ConversationMessages } from '@/api/chatService'
 import type { ChatFile } from '@/types/chat'
 
 /**
@@ -142,9 +150,110 @@ export function useV1Chat() {
   // Reactive accessors - these read from the Chat's Vue-reactive state
   const messages = computed(() => chat.messages)
   const status = computed(() => chat.status)
-  const isStreaming = computed(() => chat.status === 'streaming' || chat.status === 'submitted')
+  const isStreaming = computed(
+    () =>
+      chat.status === 'streaming' ||
+      chat.status === 'submitted' ||
+      isEditStreaming.value,
+  )
   const error = computed(() => chat.error)
   const isEmpty = computed(() => chat.messages.length === 0)
+
+  const editingMessage = ref<{ id: string; content: string } | null>(null)
+  const isEditStreaming = ref(false)
+
+  function startEdit(message: { id: string; content: string }) {
+    editingMessage.value = message
+  }
+
+  function cancelEdit() {
+    editingMessage.value = null
+  }
+
+  async function submitEdit(newContent: string) {
+    const msg = editingMessage.value
+    if (!msg) return
+    if (!appStore.userSelectedModel) {
+      toast.error('No model selected', {
+        description: 'Please select a model before editing.',
+      })
+      return
+    }
+    if (!chatConversationId.value) {
+      toast.error('Cannot edit', {
+        description: 'No conversation loaded.',
+      })
+      return
+    }
+
+    const targetIdx = chat.messages.findIndex((m) => m.id === msg.id)
+    if (targetIdx === -1) {
+      toast.error('Message not found')
+      cancelEdit()
+      return
+    }
+
+    const originalMsg = chat.messages[targetIdx]
+    const updatedUserMessage: UIMessage = {
+      ...originalMsg,
+      id: originalMsg.id ?? msg.id,
+      parts: [{ type: 'text' as const, text: newContent }],
+    }
+    const messagesBeforeEdit = [
+      ...chat.messages.slice(0, targetIdx),
+      updatedUserMessage,
+    ]
+
+    editingMessage.value = null
+    isEditStreaming.value = true
+
+    try {
+      const response = await editV1Message({
+        conversationId: chatConversationId.value,
+        messageId: msg.id,
+        content: newContent,
+        provider: getProvider(),
+        model: appStore.userSelectedModelName!,
+        enableWebTools: appStore.canUseWebTools && appStore.useWebTools,
+        enableCodeTools: false,
+        enableThinking: appStore.canThink && appStore.shouldThink,
+      })
+
+      if (!response.ok) {
+        const res = await response.json().catch(() => ({ error: 'Edit failed' }))
+        throw new Error(res.error || 'Edit failed')
+      }
+
+      if (!response.body) {
+        throw new Error('Empty response body')
+      }
+
+      const chunkStream = parseJsonEventStream({
+        stream: response.body,
+        schema: uiMessageChunkSchema,
+      }).pipeThrough(
+        new TransformStream({
+          transform(chunk, controller) {
+            if (chunk.success) controller.enqueue(chunk.value)
+            else throw chunk.error
+          },
+        }),
+      )
+
+      for await (const uiMessage of readUIMessageStream({ stream: chunkStream })) {
+        chat.messages = [...messagesBeforeEdit, uiMessage]
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['chats'] })
+    } catch (err) {
+      console.error('Edit error:', err)
+      toast.error('Edit failed', {
+        description: err instanceof Error ? err.message : 'An error occurred',
+      })
+    } finally {
+      isEditStreaming.value = false
+    }
+  }
 
   /**
    * Send a message to the chat
@@ -254,6 +363,10 @@ export function useV1Chat() {
     isStreaming,
     error,
     isEmpty,
+    editingMessage,
+    startEdit,
+    cancelEdit,
+    submitEdit,
     sendMessage,
     regenerate,
     stop,

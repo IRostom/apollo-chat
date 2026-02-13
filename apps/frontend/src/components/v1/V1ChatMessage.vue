@@ -22,6 +22,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
     retry: [messageId: string]
     copy: [content: string]
+    edit: [payload: { id: string; content: string }]
 }>()
 
 const isUser = computed(() => props.message.role === 'user')
@@ -156,7 +157,8 @@ function handleRetry() {
             </CardContent>
         </Card>
         <MessageTools role="user" class="ms-auto opacity-0 group-hover:opacity-100 transition-opacity"
-            @copy="emit('copy', textContent)" />
+            @copy="emit('copy', textContent)"
+            @edit="emit('edit', { id: message.id, content: textContent })" />
     </div>
 
     <!-- Assistant message -->
