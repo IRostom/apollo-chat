@@ -241,6 +241,10 @@ export async function saveUIMessages(
 
 /**
  * Load all UIMessages for a conversation, ordered by creation.
+ *
+ * **Security**: This function does NOT verify conversation ownership.
+ * Callers MUST verify the conversation belongs to the authenticated user
+ * (via `getAIConversation(id, userId)`) before calling this function.
  */
 export async function loadUIMessages(
   conversationId: number
@@ -269,6 +273,10 @@ export async function loadUIMessages(
 /**
  * Get raw message rows with their DB IDs.
  * Useful for retry/edit operations that need to delete/update specific rows.
+ *
+ * **Security**: This function does NOT verify conversation ownership.
+ * Callers MUST verify the conversation belongs to the authenticated user
+ * (via `getAIConversation(id, userId)`) before calling this function.
  */
 export async function getMessageRows(
   conversationId: number
