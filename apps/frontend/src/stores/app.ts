@@ -21,9 +21,7 @@ export const useAppStore = defineStore(
 
     function updateUserSelectedModel(v: Model | undefined) {
       userSelectedModel.value = v
-      if (v?.providerId) {
-        userSelectedProvider.value = v.providerId
-      }
+      userSelectedProvider.value = v?.providerId
     }
     function updateUserSelectedProvider(v: string | undefined) {
       userSelectedProvider.value = v

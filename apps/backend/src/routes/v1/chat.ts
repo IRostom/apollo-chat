@@ -51,7 +51,7 @@ interface ChatRequestBody {
   enableCodeTools?: boolean;
   enableThinking?: boolean;
   responseFormat?: ResponseFormat;
-  trigger?: "submit-user-message" | "regenerate-message";
+  trigger?: "submit-message" | "regenerate-message";
   messageId?: string;
 }
 
@@ -506,10 +506,22 @@ router.post("/edit", editValidation, async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Can only edit user messages" });
     }
 
-    // Update the user message content
+    // Update the user message content, preserving non-text parts (images, files)
+    const originalParts = rows[targetIdx].uiMessage.parts ?? [];
+    let textReplaced = false;
+    const updatedParts = originalParts.map((p) => {
+      if (p.type === "text" && !textReplaced) {
+        textReplaced = true;
+        return { type: "text" as const, text: content };
+      }
+      return p;
+    });
+    if (!textReplaced) {
+      updatedParts.push({ type: "text" as const, text: content });
+    }
     const updatedMessage: UIMessage = {
       ...rows[targetIdx].uiMessage,
-      parts: [{ type: "text" as const, text: content }],
+      parts: updatedParts,
     };
     await updateMessageRow(rows[targetIdx].messageId, updatedMessage);
 

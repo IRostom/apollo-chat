@@ -26,7 +26,7 @@ export async function getV1ConversationMessages(id: string): Promise<UIMessage[]
   const response = await fetch(getApiUrl(API_CONFIG.endpoints.v1Conversations.messages(id)))
 
   if (!response.ok) {
-    const res = await response.json()
+    const res = await response.json().catch(() => ({ error: 'Failed to fetch v1 chat history' }))
     throw new Error(res.error || 'Failed to fetch v1 chat history')
   }
 

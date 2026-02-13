@@ -93,6 +93,9 @@ export function useV1Chat() {
 
       // Send new message: send the last UIMessage (from the Chat class)
       const lastMessage = messages[messages.length - 1]
+      if (!lastMessage) {
+        throw new Error('No message to send')
+      }
 
       return {
         body: {

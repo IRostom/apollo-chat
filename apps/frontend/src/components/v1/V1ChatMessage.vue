@@ -257,7 +257,7 @@ function handleRetry() {
 
         <!-- Source URLs -->
         <div v-if="sourceParts.length" class="flex flex-wrap gap-2 my-2">
-            <a v-for="source in sourceParts" :key="'sourceId' in source ? (source as any).sourceId : undefined"
+            <a v-for="(source, idx) in sourceParts" :key="'sourceId' in source ? (source as any).sourceId : (source as any).url ?? idx"
                 :href="(source as any).url" target="_blank" rel="noopener noreferrer"
                 class="text-xs border rounded-lg px-2 py-1 hover:bg-muted transition-colors no-underline">
                 {{ (source as any).title || (source as any).url }}
@@ -299,7 +299,7 @@ function handleRetry() {
         </div>
 
         <!-- Error state -->
-        <div v-if="!isTextStreaming && !textContent && !isLoading && !toolParts.length"
+        <div v-if="!isTextStreaming && !textContent && !isLoading && !toolParts.length && !fileParts.length && !sourceParts.length && !reasoningParts.length"
             class="mt-4 flex items-center gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive">
             <AlertCircle class="h-5 w-5 shrink-0" />
             <span class="flex-1 text-sm">An error occurred while generating a response.</span>

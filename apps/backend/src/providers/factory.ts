@@ -77,7 +77,7 @@ export function isProviderConfigured(provider: Provider): boolean {
     case "anthropic":
       return !!process.env.ANTHROPIC_API_KEY;
     case "ollama":
-      // Ollama is always available if the server is running
+      // Availability is validated at runtime via PingOllama(); OLLAMA_HOST defaults to localhost:11434
       return true;
     case "ollama-cloud":
       return !!process.env.OLLAMA_API_KEY;

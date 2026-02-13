@@ -86,7 +86,7 @@ router.get("/", async (_req: Request, res: Response) => {
     console.error("v1/models: Error listing models:", error);
     res.status(500).json({
       success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: "Failed to list models",
     });
   }
 });

@@ -26,7 +26,8 @@ export const conversationsTable = sqliteTable("conversations_table", {
     .default(sql`(current_timestamp)`),
   updated_at: text()
     .notNull()
-    .default(sql`(current_timestamp)`),
+    .default(sql`(current_timestamp)`)
+    .$onUpdate(() => sql`(current_timestamp)`),
 });
 
 export const messagesTable = sqliteTable("messages_table", {
@@ -44,7 +45,8 @@ export const messagesTable = sqliteTable("messages_table", {
     .default(sql`(current_timestamp)`),
   updated_at: text()
     .notNull()
-    .default(sql`(current_timestamp)`),
+    .default(sql`(current_timestamp)`)
+    .$onUpdate(() => sql`(current_timestamp)`),
   images: text(),
   metadata: text(),
 });

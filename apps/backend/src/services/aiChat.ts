@@ -149,14 +149,17 @@ export async function branchConversation(
 
 /**
  * Delete a conversation and all its messages.
+ * Uses a transaction so both deletes succeed or both roll back.
  */
 export async function deleteAIConversation(id: number): Promise<void> {
-  await db
-    .delete(aiMessagesTable)
-    .where(eq(aiMessagesTable.conversation_id, id));
-  await db
-    .delete(aiConversationsTable)
-    .where(eq(aiConversationsTable.id, id));
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(aiMessagesTable)
+      .where(eq(aiMessagesTable.conversation_id, id));
+    await tx
+      .delete(aiConversationsTable)
+      .where(eq(aiConversationsTable.id, id));
+  });
 }
 
 // ============================================================================
