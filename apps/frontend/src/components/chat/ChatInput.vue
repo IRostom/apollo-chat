@@ -171,9 +171,10 @@ function openFilePicker() {
 
 function onFileChange(event: Event) {
   const files = (event.target as HTMLInputElement).files
-  if (!files || !files.length) return
+  if (!files || files.length === 0) return
   const file = files[0]
-  const isImage = file.type.startsWith('image/')
+  if (!file) return
+  const isImage = file.type?.startsWith('image/')
   const isPdf = file.type === 'application/pdf'
 
   if (isImage && !supportsVision.value) {

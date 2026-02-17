@@ -12,15 +12,10 @@ echo "🚀 Starting Apollo Chat Backend..."
 # =============================================================================
 # Step 1: Run Database Migrations
 # =============================================================================
-# drizzle-kit push compares your schema.ts with the actual database
-# and applies any necessary changes (creates tables, adds columns, etc.)
-#
-# Benefits:
-# - If database doesn't exist, it creates it with all tables
-# - If you added a new column to schema.ts, it adds that column
-# - Idempotent: safe to run multiple times
+# Applies committed SQL migrations in ./drizzle to keep the
+# database schema consistent across environments.
 echo "📦 Running database migrations..."
-npx drizzle-kit push
+node dist/db/migrate.js
 
 echo "✅ Database migrations complete!"
 

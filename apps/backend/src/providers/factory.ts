@@ -1,6 +1,6 @@
-import { createOpenAI, openai } from "@ai-sdk/openai";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createAnthropic } from "@ai-sdk/anthropic";
+import { openai } from "@ai-sdk/openai";
+import { google } from "@ai-sdk/google";
+import { anthropic } from "@ai-sdk/anthropic";
 import { createOllama, ollama } from "ai-sdk-ollama";
 
 export type Provider =
@@ -10,25 +10,10 @@ export type Provider =
   | "ollama"
   | "ollama-cloud";
 
-// Create provider instances with API keys from environment variables
-const openaiProvider = createOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-const googleProvider = createGoogleGenerativeAI({
-  apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
-});
-
-const anthropicProvider = createAnthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
-
 const ollamaCloudProvider = createOllama({
   baseURL: "https://ollama.com",
   apiKey: process.env.OLLAMA_API_KEY,
 });
-
-// Ollama uses OLLAMA_HOST from environment (handled by ai-sdk-ollama)
 
 export interface ModelOptions {
   /** Enable thinking/reasoning output (Ollama models that support it) */
@@ -47,9 +32,9 @@ export function getModel(provider: Provider, modelId: string, options?: ModelOpt
     case "openai":
       return openai(modelId);
     case "google":
-      return googleProvider(modelId);
+      return google(modelId);
     case "anthropic":
-      return anthropicProvider(modelId);
+      return anthropic(modelId);
     case "ollama":
       return ollama(modelId, {
         ...(options?.think !== undefined && { think: options.think }),

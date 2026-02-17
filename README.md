@@ -71,11 +71,11 @@ Apollo Chat can run in a production-ish setup via Compose:
 ### Prerequisites
 
 - **Docker** + **Docker Compose**
-- **Ollama on the host**
-  - Ollama must listen on **`0.0.0.0`** (not only `127.0.0.1`) so containers can reach it:
+- **External Ollama endpoint** (if using Ollama provider)
+  - Set `OLLAMA_HOST` to a reachable URL from inside Docker (for example `https://ollama.example.com`):
 
 ```bash
-OLLAMA_HOST=0.0.0.0:11434 ollama serve
+export OLLAMA_HOST=https://ollama.example.com
 ```
 
 ### Run (build + start)
@@ -91,11 +91,25 @@ Open:
 
 ### How Ollama works in Docker
 
-The backend uses `OLLAMA_HOST`. In `docker-compose.yml`, `host.docker.internal` is mapped to the host gateway:
+The backend uses `OLLAMA_HOST` from your environment. Compose does not map to a host-local Ollama anymore, so the endpoint must be externally reachable by the backend container.
 
-- `OLLAMA_HOST=http://host.docker.internal:11434`
+### Database migrations in Docker
 
-Change it if your Ollama lives elsewhere.
+Backend startup applies committed Drizzle migrations from `apps/backend/drizzle` before the API process starts.
+
+- Generate a new migration after schema changes:
+
+```bash
+pnpm --filter @apollo-chat/backend db:generate
+```
+
+- Apply migrations locally:
+
+```bash
+DB_FILE_NAME=file:./apps/backend/data/history.db pnpm --filter @apollo-chat/backend db:migrate
+```
+
+- In Docker, migrations are applied automatically on backend container start.
 
 ### Data persistence
 
@@ -115,6 +129,24 @@ To also remove volumes (deletes DB + uploads):
 ```bash
 docker compose down -v
 ```
+
+### Production env checklist
+
+At minimum, configure:
+
+- `OLLAMA_HOST` (external endpoint, if Ollama provider is enabled)
+- `DB_FILE_NAME` (Compose defaults to `file:/app/data/history.db`)
+- Clerk/auth variables required by your environment
+- S3 variables (`S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, optional region/path-style flags)
+
+### SQLite backup and rollback
+
+SQLite data is stored in the named Docker volume `apollo-chat_db-data`. Before risky deploys:
+
+1. Stop writes to the app.
+2. Snapshot/backup the `history.db` file from the volume.
+3. Deploy and run health checks.
+4. If rollback is needed, restore the volume backup and restart containers.
 
 ## Handy scripts
 

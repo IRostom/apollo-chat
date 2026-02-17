@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import type { UIMessage, FileUIPart } from 'ai'
+import type {
+    UIMessage,
+    FileUIPart,
+    ReasoningUIPart,
+    DynamicToolUIPart,
+    ToolUIPart,
+    UITools,
+} from 'ai'
 import { isToolUIPart, getToolName } from 'ai'
 import { computed } from 'vue'
 import Spinner from '@/components/ui/spinner/Spinner.vue'
@@ -34,7 +41,7 @@ const isAssistant = computed(() => props.message.role === 'assistant')
 // ============================================================================
 
 const reasoningParts = computed(() =>
-    props.message.parts.filter((p) => p.type === 'reasoning'),
+    props.message.parts.filter((p): p is ReasoningUIPart => p.type === 'reasoning'),
 )
 
 const toolParts = computed(() =>
@@ -66,12 +73,12 @@ const isTextStreaming = computed(() =>
 )
 
 const isReasoningStreaming = computed(() =>
-    reasoningParts.value.some((p) => 'state' in p && (p as any).state === 'streaming'),
+    reasoningParts.value.some((p) => p.state === 'streaming'),
 )
 
 const hasActiveTools = computed(() =>
     toolParts.value.some(
-        (t) => (t as any).state === 'input-streaming' || (t as any).state === 'input-available',
+        (t) => t.state === 'input-streaming' || t.state === 'input-available',
     ),
 )
 
@@ -119,7 +126,7 @@ function getWebFetchUrl(tool: any): string | null {
     return input.url ?? null
 }
 
-function isWebFetchTool(tool: unknown): boolean {
+function isWebFetchTool(tool:  ToolUIPart<UITools> | DynamicToolUIPart): boolean {
     return getToolName(tool) === 'webFetch'
 }
 

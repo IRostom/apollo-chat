@@ -29,7 +29,7 @@ function isLastMessage(index: number) {
 const showPendingIndicator = computed(() => {
     if (!props.isStreaming || props.messages.length === 0) return false
     const lastMsg = props.messages[props.messages.length - 1]
-    return lastMsg.role === 'user'
+    return lastMsg?.role === 'user'
 })
 </script>
 

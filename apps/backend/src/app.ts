@@ -6,12 +6,16 @@ import ollamaRouter from "./routes/ollamaRouter";
 import uploadRouter from "./routes/upload";
 import transcribeRouter from "./routes/transcribe";
 import modelsRouter from "./routes/models";
+import healthRouter from "./routes/health";
 // V1 API routes (AI SDK)
 import v1ChatRouter from "./routes/v1/chat";
 import v1ConversationRouter from "./routes/v1/conversation";
 import v1ModelsRouter from "./routes/v1/models";
 
 const app: Express = express();
+
+// Public health endpoint for container orchestration checks.
+app.use("/", healthRouter);
 
 // Process error handlers
 process.on("uncaughtException", (err) => {

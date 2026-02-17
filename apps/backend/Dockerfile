@@ -30,7 +30,7 @@ RUN pnpm run build:ts
 # =============================================================================
 FROM node:22-alpine AS production
 
-# Install pnpm for running drizzle-kit in entrypoint
+# Install pnpm for dependency installation
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
@@ -41,16 +41,14 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 # Copy backend package.json
 COPY apps/backend/package.json ./apps/backend/
 
-# Install all dependencies (including devDependencies for drizzle-kit)
-# drizzle-kit is needed for database migrations at runtime
-RUN pnpm install --frozen-lockfile
+# Install production dependencies only for a smaller runtime image
+RUN pnpm install --frozen-lockfile --prod --filter @apollo-chat/backend
 
 # Copy built JavaScript files from build stage
 COPY --from=build /app/apps/backend/dist ./apps/backend/dist
 
-# Copy drizzle config and schema (needed for migrations)
-COPY apps/backend/drizzle.config.ts ./apps/backend/
-COPY apps/backend/src/db/schema.ts ./apps/backend/src/db/
+# Copy committed SQL migrations
+COPY apps/backend/drizzle ./apps/backend/drizzle
 
 # Copy entrypoint script
 COPY apps/backend/entrypoint.sh ./apps/backend/

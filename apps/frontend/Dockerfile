@@ -28,8 +28,11 @@ COPY apps/frontend/ ./apps/frontend/
 
 # Build the Vue application
 # This creates static files in apps/frontend/dist/
-# Set the API base URL to use /api which nginx will proxy to backend
+# Set build-time Vite environment variables
+ARG VITE_API_BASE_URL=/api
+ARG VITE_CLERK_PUBLISHABLE_KEY
 ENV VITE_API_BASE_URL=/api
+ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY
 RUN pnpm --filter @apollo-chat/frontend build
 
 # =============================================================================
